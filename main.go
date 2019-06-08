@@ -13,30 +13,30 @@ import (
 var (
 	wg sync.WaitGroup
 
-	output   string
 	url      string
+	output   string
 	chanSize int
 )
 
 func init() {
 	flag.IntVar(&chanSize, "c", 25, "Maximum channel size")
 	flag.StringVar(&output, "o", "", "Output folder, required")
-	flag.StringVar(&url, "u", "", "Target URL, required")
+	flag.StringVar(&url, "u", "", "M3U8 URL, required")
 }
 
 func main() {
 	flag.Parse()
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Error: ", r)
+			fmt.Println("Panic: ", r)
 			os.Exit(-1)
 		}
 	}()
 	if url == "" {
-		panic("parameter [url] needed")
+		panic("parameter [url] is required")
 	}
 	if output == "" {
-		panic("parameter [output] needed")
+		panic("parameter [output] is required")
 	}
 	m3u8, err := parse.FromURL(url)
 	if err != nil {
@@ -49,23 +49,23 @@ func main() {
 	// download TS files
 	rateLimitChan := make(chan byte, chanSize)
 	for {
-		ts, err := t.Next()
+		tsIdx, err := t.Next()
 		if err != nil {
 			break
 		}
 		wg.Add(1)
-		go func(p string) {
+		go func(idx int) {
 			defer wg.Done()
-			if err := t.DealWith(p); err != nil {
-				fmt.Println(err.Error())
+			if err := t.Do(idx); err != nil {
+				fmt.Printf(err.Error())
 			}
 			<-rateLimitChan
-		}(ts)
+		}(tsIdx)
 		rateLimitChan <- 0
 	}
 	wg.Wait()
 	if err := t.Merge(); err != nil {
 		panic(err)
 	}
-	fmt.Printf("Finished!")
+	fmt.Println("Finished!")
 }

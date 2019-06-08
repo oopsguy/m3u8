@@ -12,6 +12,7 @@ func CurrentDir(joinPath ...string) (string, error) {
 		return "", err
 	}
 	p := strings.Replace(dir, "\\", "/", -1)
-	p = filepath.Join(append([]string{p}, joinPath...)...)
-	return p, nil
+	whole := filepath.Join(joinPath...)
+	whole = filepath.Join(p, whole)
+	return whole, nil
 }

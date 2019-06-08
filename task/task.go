@@ -4,33 +4,37 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/oopsguy/m3u8/codec"
-	"github.com/oopsguy/m3u8/conf"
-	"github.com/oopsguy/m3u8/parse"
-	"github.com/oopsguy/m3u8/tool"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
+
+	"github.com/oopsguy/m3u8/codec"
+	"github.com/oopsguy/m3u8/parse"
+	"github.com/oopsguy/m3u8/tool"
 )
 
 const (
-	dataFileName    = "meta.cfg"
-	tsFolderName    = "ts"
-	mergeTSFilename = "merge.ts"
+	tsExt            = ".ts"
+	tsFolderName     = "ts"
+	mergeTSFilename  = "merged.ts"
+	tsTempFileSuffix = "_temp"
 )
 
 type Task struct {
 	Folder string
 
 	lock     sync.Mutex
-	queue    []string
+	queue    []int
 	tsFolder string
+	finish   int
 
-	codec  codec.Codec
-	m3u8   *parse.M3u8
-	config *conf.Config
+	codec codec.Codec
+	m3u8  *parse.M3u8
 }
 
 func NewTask(output string, m *parse.M3u8) (*Task, error) {
@@ -41,8 +45,10 @@ func NewTask(output string, m *parse.M3u8) (*Task, error) {
 		if err != nil {
 			return nil, err
 		}
+		fmt.Println("Use decode key: ", string(m.CryptKey))
 	}
 	var folder string
+	// if no output folder specified, use current directory
 	if output == "" {
 		current, err := tool.CurrentDir()
 		if err != nil {
@@ -57,99 +63,89 @@ func NewTask(output string, m *parse.M3u8) (*Task, error) {
 	}
 	tsFolder := filepath.Join(folder, tsFolderName)
 	if err := os.MkdirAll(tsFolder, os.ModePerm); err != nil {
-		return nil, fmt.Errorf("ts folder create failed: %s", tsFolder)
-	}
-	cTs := make([]string, len(m.TS))
-	copy(cTs, m.TS)
-	dFile := filepath.Join(folder, dataFileName)
-	c, err := conf.NewConfig(dFile, m.URL, cTs...)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ts folder [%s] create failed: %s", tsFolder, err.Error())
 	}
 	t := &Task{
 		Folder:   folder,
 		tsFolder: tsFolder,
 		m3u8:     m,
 		codec:    decoder,
-		config:   c,
 	}
-	t.queue = make([]string, len(m.TS))
-	copy(t.queue, m.TS)
+	t.queue = make([]int, 0)
+	for tsIdx := range m.TS {
+		t.queue = append(t.queue, tsIdx)
+	}
 	return t, nil
 }
 
-func (t *Task) DealWith(ts string) error {
-	b, e := tool.Get(t.m3u8.BaseURL + "/" + ts)
+func (t *Task) Do(tsIdx int) error {
+	tsFilename := genTSFilename(tsIdx)
+	b, e := tool.Get(t.tsURL(tsIdx))
 	if e != nil {
-		return fmt.Errorf("Download %s failed: %s\n", ts, e.Error())
+		return fmt.Errorf("download %s failed: %s\n", tsFilename, e.Error())
 	}
+	//noinspection GoUnhandledErrorResult
 	defer b.Close()
-	fPath := filepath.Join(t.tsFolder, ts)
-	fTemp := fPath + "_temp"
+	fPath := filepath.Join(t.tsFolder, tsFilename)
+	fTemp := fPath + tsTempFileSuffix
 	f, err := os.Create(fTemp)
 	if err != nil {
-		return fmt.Errorf("Create TS file [%s] failed\n", ts)
+		return fmt.Errorf("create TS file [%s] failed: %s\n", tsFilename, err.Error())
 	}
 	bytes, err := ioutil.ReadAll(b)
 	if err != nil {
-		return fmt.Errorf("Read TS [%s] bytes failed\n", ts)
+		return fmt.Errorf("read TS [%s] bytes failed: %s\n", tsFilename, err.Error())
 	}
 	if t.codec != nil {
 		bytes, err = t.codec.Decode(bytes)
 		if err != nil {
-			return fmt.Errorf("decode TS file [%s] failed: %s", ts, err.Error())
+			return fmt.Errorf("decode TS file [%s] failed: %s", tsFilename, err.Error())
 		}
 	}
 	w := bufio.NewWriter(f)
 	if _, err := w.Write(bytes); err != nil {
-		return fmt.Errorf("Write TS [%s] bytes failed\n", ts)
-	}
-	if err := t.Finish(ts); err != nil {
-		return fmt.Errorf("Save TS [%s] data failed\n", ts)
+		return fmt.Errorf("write TS [%s] bytes failed: %s\n", tsFilename, err.Error())
 	}
 	if err = os.Rename(fTemp, fPath); err != nil {
 		return err
 	}
-	fmt.Printf("%s finished [%d bytes]\n", ts, len(bytes))
+	t.finish++
+	fmt.Printf("%s finished %3.0f%%\n", tsFilename, float32(t.finish)/float32(len(t.m3u8.TS))*100)
 	return nil
 }
 
-func (t *Task) Next() (string, error) {
+func (t *Task) Next() (int, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	if len(t.queue) == 0 {
-		return "", errors.New("queue empty")
+		return 0, errors.New("queue empty")
 	}
-	ts := t.queue[0]
+	tsIdx := t.queue[0]
 	t.queue = t.queue[1:]
-	return ts, nil
-}
-
-func (t *Task) Finish(ts string) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	return t.config.Finish(ts)
+	return tsIdx, nil
 }
 
 func (t *Task) Merge() error {
 	fmt.Println("Verifying TS files...")
 	var missing bool
-	for _, ts := range t.m3u8.TS {
-		f := filepath.Join(t.tsFolder, ts)
+	for tsIdx := range t.m3u8.TS {
+		tsFilename := genTSFilename(tsIdx)
+		f := filepath.Join(t.tsFolder, tsFilename)
 		if _, err := os.Stat(f); err != nil {
 			missing = true
-			fmt.Printf("Missing the TS file：%s\n", ts)
+			fmt.Printf("Missing the TS file：%s\n", tsFilename)
 		}
 	}
 	if missing {
 		return fmt.Errorf("merge TS file failed")
 	}
+
 	// merge all TS files
-	//mf := filepath.Join(t.Folder, t.Name)
 	mFile, err := os.Create(filepath.Join(t.Folder, mergeTSFilename))
 	if err != nil {
 		panic(fmt.Sprintf("merge TS file failed：%s\n", err.Error()))
 	}
+	//noinspection GoUnhandledErrorResult
 	defer mFile.Close()
 	// move to EOF
 	ls, err := mFile.Seek(0, io.SeekEnd)
@@ -157,18 +153,41 @@ func (t *Task) Merge() error {
 		return err
 	}
 	fmt.Println("Merging TS files...")
-	for _, ts := range t.m3u8.TS {
-		bytes, err := ioutil.ReadFile(filepath.Join(t.tsFolder, ts))
+	tsIndexes := make([]int, 0)
+	for idx := range t.m3u8.TS {
+		tsIndexes = append(tsIndexes, idx)
+	}
+	// sort indexes
+	sort.Ints(tsIndexes)
+	mergedCount := 0
+	// TODO: consider using batch merging, divide merging task into multiple sub tasks in goroutine.
+	for _, tsIdx := range tsIndexes {
+		tsFilename := genTSFilename(tsIdx)
+		bytes, err := ioutil.ReadFile(filepath.Join(t.tsFolder, tsFilename))
 		s, err := mFile.WriteAt(bytes, ls)
 		if err != nil {
 			return err
 		}
 		ls += int64(s)
-		fmt.Printf("TS file [%s] merged\n", ts)
+		mergedCount++
+		fmt.Printf("\r")
+		fmt.Printf("TS file merging %s %3.2f%%", tsFilename, float32(mergedCount)/float32(len(t.m3u8.TS))*100)
 	}
+	fmt.Println()
 	_ = mFile.Sync()
 	// remove ts folder
 	_ = os.RemoveAll(t.tsFolder)
-	fmt.Println("All TS files Merged!")
 	return nil
+}
+
+func genTSFilename(ts int) string {
+	return strconv.Itoa(ts) + tsExt
+}
+
+func (t *Task) tsURL(tsIdx int) string {
+	tsURI := t.m3u8.TS[tsIdx]
+	if strings.HasPrefix(tsURI, "https:") || strings.HasPrefix(tsURI, "http:") {
+		return tsURI
+	}
+	return t.m3u8.BaseURL + "/" + tsURI
 }

@@ -4,19 +4,21 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/oopsguy/m3u8/codec"
-	"github.com/oopsguy/m3u8/tool"
 	"io/ioutil"
 	"net/url"
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/oopsguy/m3u8/codec"
+	"github.com/oopsguy/m3u8/tool"
 )
 
 const (
 	m3u8Identifier       = "#EXTM3U"
 	m3u8KeyIdentifier    = "#EXT-X-KEY" // only support single #EXT-X-KEY
 	m3m8NestedIdentifier = "#EXT-X-STREAM-INF"
+	m3u8ExtInfIdentifier = "#EXTINF:"
 )
 
 type M3u8 struct {
@@ -24,7 +26,7 @@ type M3u8 struct {
 	BaseURL     string
 	CryptMethod string
 	CryptKey    []byte
-	TS          []string
+	TS          map[int]string
 }
 
 func FromURL(link string) (*M3u8, error) {
@@ -35,23 +37,26 @@ func FromURL(link string) (*M3u8, error) {
 	link = u.String()
 	body, err := tool.Get(link)
 	if err != nil {
-		return nil, fmt.Errorf("request target URL failed: %s", err.Error())
+		return nil, fmt.Errorf("request m3u8 URL failed: %s", err.Error())
 	}
+	//noinspection GoUnhandledErrorResult
 	defer body.Close()
 	s := bufio.NewScanner(body)
 	var (
-		ts         []string
 		i          int
 		nested     bool
 		nestedM3u8 string
 		method     string
 		key        string
+		pre        string
+		tsIdx      int
+		ts         = make(map[int]string)
 	)
 	for s.Scan() {
 		t := s.Text()
 		if i == 0 {
 			if strings.Index(t, m3u8Identifier) < 0 {
-				return nil, errors.New("invalid m3u url")
+				return nil, errors.New("invalid m3u8 URL")
 			}
 		}
 		i++
@@ -65,13 +70,18 @@ func FromURL(link string) (*M3u8, error) {
 					return nil, fmt.Errorf("parse key failed: %s", t)
 				}
 			}
+			pre = t
 			continue
 		}
 		if nested {
 			nestedM3u8 = t
 			break
 		}
-		ts = append(ts, t)
+		if strings.Index(pre, m3u8ExtInfIdentifier) == 0 && t != "" {
+			ts[tsIdx] = t
+			tsIdx++
+		}
+		pre = t
 	}
 	// redirect to the inner m3u8 URL
 	if nested && nestedM3u8 != "" {
@@ -89,18 +99,19 @@ func FromURL(link string) (*M3u8, error) {
 		m.CryptMethod = codec.AES
 	}
 	if key != "" {
-		// request encryption key
+		// request key URL
 		keyURL := baseURL(u, key, key)
 		resp, err := tool.Get(keyURL)
 		if err != nil {
-			return nil, fmt.Errorf("request key failed: %s", err.Error())
+			return nil, fmt.Errorf("extract key failed: %s", err.Error())
 		}
+		//noinspection GoUnhandledErrorResult
 		defer resp.Close()
 		keyByte, err := ioutil.ReadAll(resp)
 		if err != nil {
 			return nil, err
 		}
-		fmt.Println("key: ", string(keyByte))
+		fmt.Println("Extract key: ", string(keyByte))
 		m.CryptKey = keyByte
 	}
 	return m, nil
@@ -113,18 +124,20 @@ func baseURL(u *url.URL, p string, join ...string) string {
 	} else {
 		baseURL = u.String()[0:strings.LastIndex(u.String(), "/")]
 	}
-	return baseURL + "/" + path.Join(join...)
+	if join != nil {
+		return baseURL + "/" + path.Join(join...)
+	}
+	return baseURL
 }
 
 func parseKeyLine(line string) (method, key string, err error) {
-	fmt.Println(line)
 	r, err := regexp.Compile(`#EXT-X-KEY:.*?METHOD=(.*?),URI="(.*?)"`)
 	if err != nil {
 		return "", "", err
 	}
 	s := r.FindAllStringSubmatch(line, -1)
 	if len(s) == 0 {
-		return "", "", errors.New("no key found")
+		return "", "", errors.New("key not found")
 	}
 	meta := s[0]
 	return meta[1], meta[2], nil
