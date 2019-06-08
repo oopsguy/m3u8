@@ -26,7 +26,7 @@ go build
 **run**
 
 ```
-./m3u8 -url=http://example.com/index.m3u8 -name=example
+./m3u8 -u=http://example.com/index.m3u8 -o=/data/example
 ```
 
 ## License 

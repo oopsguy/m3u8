@@ -4,26 +4,24 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/oopsguy/m3u8/codec"
+	"github.com/oopsguy/m3u8/conf"
+	"github.com/oopsguy/m3u8/parse"
+	"github.com/oopsguy/m3u8/tool"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
-
-	"github.com/oopsguy/m3u8/codec"
-	"github.com/oopsguy/m3u8/conf"
-	"github.com/oopsguy/m3u8/parse"
-	"github.com/oopsguy/m3u8/tool"
 )
 
 const (
-	dataFileName = "meta.cfg"
-	tsFolderName = "ts"
+	dataFileName    = "meta.cfg"
+	tsFolderName    = "ts"
+	mergeTSFilename = "merge.ts"
 )
 
 type Task struct {
-	Name   string
 	Folder string
 
 	lock     sync.Mutex
@@ -35,7 +33,7 @@ type Task struct {
 	config *conf.Config
 }
 
-func NewTask(name string, m *parse.M3u8) (*Task, error) {
+func NewTask(output string, m *parse.M3u8) (*Task, error) {
 	var err error
 	var decoder codec.Codec
 	if m.CryptMethod != "" {
@@ -44,16 +42,21 @@ func NewTask(name string, m *parse.M3u8) (*Task, error) {
 			return nil, err
 		}
 	}
-	current, err := tool.CurrentDir()
-	if err != nil {
-		return nil, err
+	var folder string
+	if output == "" {
+		current, err := tool.CurrentDir()
+		if err != nil {
+			return nil, err
+		}
+		folder = filepath.Join(current, output)
+	} else {
+		folder = output
 	}
-	folder := filepath.Join(current, name)
-	if err := os.MkdirAll(folder, 0777); err != nil {
+	if err := os.MkdirAll(folder, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("create storage folder failed: %s", err.Error())
 	}
 	tsFolder := filepath.Join(folder, tsFolderName)
-	if err := os.MkdirAll(tsFolder, 0777); err != nil {
+	if err := os.MkdirAll(tsFolder, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("ts folder create failed: %s", tsFolder)
 	}
 	cTs := make([]string, len(m.TS))
@@ -65,7 +68,6 @@ func NewTask(name string, m *parse.M3u8) (*Task, error) {
 	}
 	t := &Task{
 		Folder:   folder,
-		Name:     name,
 		tsFolder: tsFolder,
 		m3u8:     m,
 		codec:    decoder,
@@ -77,7 +79,7 @@ func NewTask(name string, m *parse.M3u8) (*Task, error) {
 }
 
 func (t *Task) DealWith(ts string) error {
-	b, e := tool.Get(t.m3u8.BaseURL+"/"+ts, time.Duration(30)*time.Second)
+	b, e := tool.Get(t.m3u8.BaseURL + "/" + ts)
 	if e != nil {
 		return fmt.Errorf("Download %s failed: %s\n", ts, e.Error())
 	}
@@ -108,7 +110,7 @@ func (t *Task) DealWith(ts string) error {
 	if err = os.Rename(fTemp, fPath); err != nil {
 		return err
 	}
-	fmt.Printf("Finish TS [%s] finished [%d] bytes\n", ts, len(bytes))
+	fmt.Printf("%s finished [%d bytes]\n", ts, len(bytes))
 	return nil
 }
 
@@ -144,44 +146,29 @@ func (t *Task) Merge() error {
 	}
 	// merge all TS files
 	//mf := filepath.Join(t.Folder, t.Name)
-	mFile, err := os.Create(filepath.Join(t.Folder, t.Name) + ".ts")
+	mFile, err := os.Create(filepath.Join(t.Folder, mergeTSFilename))
 	if err != nil {
 		panic(fmt.Sprintf("merge TS file failed：%s\n", err.Error()))
 	}
 	defer mFile.Close()
-	fmt.Println("Merging TS files...")
-	//// move to EOF
-	//ls, err := mFile.Seek(0, io.SeekEnd);
-	//if err != nil {
-	//	return err
-	//}
-	for _, ts := range t.m3u8.TS {
-		// move to EOF
-		ls, err := mFile.Seek(0, io.SeekEnd);
-		if err != nil {
-			return err
-		}
-		f, err := os.Open(filepath.Join(t.tsFolder, ts))
-		if err != nil {
-			return fmt.Errorf("read TS file [%s] failed: %s", ts, err.Error())
-		}
-		bytes, err := ioutil.ReadAll(f)
-		if err != nil {
-			_ = f.Close()
-			return fmt.Errorf("read TS file [%s] failed: %s", ts, err.Error())
-		}
-		s, err := mFile.WriteAt(bytes, ls);
-		if err != nil {
-			_ = f.Close()
-			return err
-		}
-		_ = f.Close()
-		_ = mFile.Sync()
-		ls += int64(s)
-		fmt.Printf("TS file merged: %s\n", ts)
+	// move to EOF
+	ls, err := mFile.Seek(0, io.SeekEnd)
+	if err != nil {
+		return err
 	}
+	fmt.Println("Merging TS files...")
+	for _, ts := range t.m3u8.TS {
+		bytes, err := ioutil.ReadFile(filepath.Join(t.tsFolder, ts))
+		s, err := mFile.WriteAt(bytes, ls)
+		if err != nil {
+			return err
+		}
+		ls += int64(s)
+		fmt.Printf("TS file [%s] merged\n", ts)
+	}
+	_ = mFile.Sync()
 	// remove ts folder
-	_ = os.Remove(t.tsFolder)
+	_ = os.RemoveAll(t.tsFolder)
 	fmt.Println("All TS files Merged!")
 	return nil
 }

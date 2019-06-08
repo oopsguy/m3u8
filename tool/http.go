@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-func Get(url string, timeout time.Duration) (io.ReadCloser, error) {
+func Get(url string) (io.ReadCloser, error) {
 	c := http.Client{
-		Timeout: time.Duration(timeout) * time.Second,
+		Timeout: time.Duration(30) * time.Second,
 	}
 	resp, err := c.Get(url)
 	if err != nil {

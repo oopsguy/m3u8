@@ -4,15 +4,13 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/oopsguy/m3u8/codec"
+	"github.com/oopsguy/m3u8/tool"
 	"io/ioutil"
 	"net/url"
 	"path"
 	"regexp"
 	"strings"
-	"time"
-
-	"github.com/oopsguy/m3u8/codec"
-	"github.com/oopsguy/m3u8/tool"
 )
 
 const (
@@ -35,7 +33,7 @@ func FromURL(link string) (*M3u8, error) {
 		return nil, err
 	}
 	link = u.String()
-	body, err := tool.Get(link, time.Duration(30)*time.Second)
+	body, err := tool.Get(link)
 	if err != nil {
 		return nil, fmt.Errorf("request target URL failed: %s", err.Error())
 	}
@@ -93,7 +91,7 @@ func FromURL(link string) (*M3u8, error) {
 	if key != "" {
 		// request encryption key
 		keyURL := baseURL(u, key, key)
-		resp, err := tool.Get(keyURL, time.Duration(30)*time.Second)
+		resp, err := tool.Get(keyURL)
 		if err != nil {
 			return nil, fmt.Errorf("request key failed: %s", err.Error())
 		}

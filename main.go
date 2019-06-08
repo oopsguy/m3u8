@@ -13,15 +13,15 @@ import (
 var (
 	wg sync.WaitGroup
 
-	name string
-	url  string
-	max  int
+	output   string
+	url      string
+	chanSize int
 )
 
 func init() {
-	flag.IntVar(&max, "max", 25, "Maximum channel size")
-	flag.StringVar(&name, "name", "", "Task name, required")
-	flag.StringVar(&url, "url", "", "Target URL, required")
+	flag.IntVar(&chanSize, "c", 25, "Maximum channel size")
+	flag.StringVar(&output, "o", "", "Output folder, required")
+	flag.StringVar(&url, "u", "", "Target URL, required")
 }
 
 func main() {
@@ -35,19 +35,19 @@ func main() {
 	if url == "" {
 		panic("parameter [url] needed")
 	}
-	if name == "" {
-		panic("parameter [name] needed")
+	if output == "" {
+		panic("parameter [output] needed")
 	}
 	m3u8, err := parse.FromURL(url)
 	if err != nil {
 		panic(fmt.Errorf("parse url failed: %s", err.Error()))
 	}
-	t, err := task.NewTask(name, m3u8)
+	t, err := task.NewTask(output, m3u8)
 	if err != nil {
 		panic(err)
 	}
 	// download TS files
-	rateLimitChan := make(chan byte, max)
+	rateLimitChan := make(chan byte, chanSize)
 	for {
 		ts, err := t.Next()
 		if err != nil {
@@ -67,5 +67,5 @@ func main() {
 	if err := t.Merge(); err != nil {
 		panic(err)
 	}
-	fmt.Printf("Download finished!")
+	fmt.Printf("Finished!")
 }
