@@ -49,15 +49,22 @@ func main() {
 	// download TS files
 	rateLimitChan := make(chan byte, chanSize)
 	for {
-		tsIdx, err := t.Next()
+		tsIdx, end, err := t.Next()
 		if err != nil {
-			break
+			if end {
+				break
+			}
+			continue
 		}
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
 			if err := t.Do(idx); err != nil {
+				// back into the queue, retry request
 				fmt.Printf(err.Error())
+				if err := t.Back(idx); err != nil {
+					fmt.Printf(err.Error())
+				}
 			}
 			<-rateLimitChan
 		}(tsIdx)
@@ -67,5 +74,5 @@ func main() {
 	if err := t.Merge(); err != nil {
 		panic(err)
 	}
-	fmt.Println("Finished!")
+	fmt.Println("Done!")
 }

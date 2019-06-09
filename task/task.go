@@ -2,7 +2,6 @@ package task
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/oopsguy/m3u8/codec"
 	"github.com/oopsguy/m3u8/parse"
@@ -23,15 +23,15 @@ const (
 	tsFolderName     = "ts"
 	mergeTSFilename  = "merged.ts"
 	tsTempFileSuffix = "_temp"
+	progressWidth    = 40
 )
 
 type Task struct {
-	Folder string
-
 	lock     sync.Mutex
 	queue    []int
+	folder   string
 	tsFolder string
-	finish   int
+	finish   int32
 
 	codec codec.Codec
 	m3u8  *parse.M3u8
@@ -66,7 +66,7 @@ func NewTask(output string, m *parse.M3u8) (*Task, error) {
 		return nil, fmt.Errorf("ts folder [%s] create failed: %s", tsFolder, err.Error())
 	}
 	t := &Task{
-		Folder:   folder,
+		folder:   folder,
 		tsFolder: tsFolder,
 		m3u8:     m,
 		codec:    decoder,
@@ -109,24 +109,41 @@ func (t *Task) Do(tsIdx int) error {
 	if err = os.Rename(fTemp, fPath); err != nil {
 		return err
 	}
-	t.finish++
-	fmt.Printf("%s finished %3.0f%%\n", tsFilename, float32(t.finish)/float32(len(t.m3u8.TS))*100)
+	atomic.AddInt32(&t.finish, 1)
+	drawProgressBar("Downloading", float32(t.finish)/float32(len(t.m3u8.TS)), progressWidth, tsFilename)
 	return nil
 }
 
-func (t *Task) Next() (int, error) {
+func (t *Task) Next() (tsIdx int, end bool, err error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	if len(t.queue) == 0 {
-		return 0, errors.New("queue empty")
+		err = fmt.Errorf("queue empty")
+		if t.finish == int32(len(t.m3u8.TS)) {
+			end = true
+			return
+		}
+		end = false
+		return
 	}
-	tsIdx := t.queue[0]
+	tsIdx = t.queue[0]
 	t.queue = t.queue[1:]
-	return tsIdx, nil
+	return
+}
+
+func (t *Task) Back(tsIdx int) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	if _, ok := t.m3u8.TS[tsIdx]; !ok {
+		return fmt.Errorf("invalid ts index")
+	}
+	t.queue = append(t.queue, tsIdx)
+	return nil
 }
 
 func (t *Task) Merge() error {
-	fmt.Println("Verifying TS files...")
+	fmt.Printf("\r")
+	fmt.Printf("Verifying TS files...")
 	var missing bool
 	for tsIdx := range t.m3u8.TS {
 		tsFilename := genTSFilename(tsIdx)
@@ -141,7 +158,7 @@ func (t *Task) Merge() error {
 	}
 
 	// merge all TS files
-	mFile, err := os.Create(filepath.Join(t.Folder, mergeTSFilename))
+	mFile, err := os.Create(filepath.Join(t.folder, mergeTSFilename))
 	if err != nil {
 		panic(fmt.Sprintf("merge TS file failed：%s\n", err.Error()))
 	}
@@ -152,7 +169,6 @@ func (t *Task) Merge() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Merging TS files...")
 	tsIndexes := make([]int, 0)
 	for idx := range t.m3u8.TS {
 		tsIndexes = append(tsIndexes, idx)
@@ -170,8 +186,7 @@ func (t *Task) Merge() error {
 		}
 		ls += int64(s)
 		mergedCount++
-		fmt.Printf("\r")
-		fmt.Printf("TS file merging %s %3.2f%%", tsFilename, float32(mergedCount)/float32(len(t.m3u8.TS))*100)
+		drawProgressBar("Merging", float32(mergedCount)/float32(len(t.m3u8.TS)), progressWidth, tsFilename)
 	}
 	fmt.Println()
 	_ = mFile.Sync()
@@ -186,8 +201,15 @@ func genTSFilename(ts int) string {
 
 func (t *Task) tsURL(tsIdx int) string {
 	tsURI := t.m3u8.TS[tsIdx]
-	if strings.HasPrefix(tsURI, "https:") || strings.HasPrefix(tsURI, "http:") {
+	if strings.HasPrefix(tsURI, "https://") || strings.HasPrefix(tsURI, "http://") {
 		return tsURI
 	}
 	return t.m3u8.BaseURL + "/" + tsURI
+}
+
+func drawProgressBar(title string, current float32, width int, suffix ...string) {
+	pos := int(current * float32(width))
+	s := fmt.Sprintf("%s [%s%*s] %6.2f%% %10s",
+		title, strings.Repeat("■", pos), width-pos, "", current*100, strings.Join(suffix, ""))
+	fmt.Print("\r" + s)
 }

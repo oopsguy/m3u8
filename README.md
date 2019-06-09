@@ -2,13 +2,6 @@
 
 M3u8 - a mini mu38 downloader written in Golang.
 
-## Features
-
-- Download m3u8 
-- Download TS files
-- Decrypt TS files
-- Merge TS files 
-
 ## Usage
 
 **install**
