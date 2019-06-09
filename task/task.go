@@ -106,6 +106,7 @@ func (t *Task) Do(tsIdx int) error {
 	if _, err := w.Write(bytes); err != nil {
 		return fmt.Errorf("write TS [%s] bytes failed: %s\n", tsFilename, err.Error())
 	}
+	_ = f.Close()
 	if err = os.Rename(fTemp, fPath); err != nil {
 		return err
 	}
