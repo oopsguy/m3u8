@@ -1,4 +1,4 @@
-package task
+package dl
 
 import (
 	"bufio"
@@ -13,7 +13,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/oopsguy/m3u8/codec"
 	"github.com/oopsguy/m3u8/parse"
 	"github.com/oopsguy/m3u8/tool"
 )
@@ -26,26 +25,22 @@ const (
 	progressWidth    = 40
 )
 
-type Task struct {
+type Downloader struct {
 	lock     sync.Mutex
 	queue    []int
 	folder   string
 	tsFolder string
 	finish   int32
+	baseURL  string
 
-	codec codec.Codec
-	m3u8  *parse.M3u8
+	result *parse.Result
 }
 
-func NewTask(output string, m *parse.M3u8) (*Task, error) {
-	var err error
-	var decoder codec.Codec
-	if m.CryptMethod != "" {
-		decoder, err = codec.NewCodec(m.CryptMethod, m.CryptKey)
-		if err != nil {
-			return nil, err
-		}
-		fmt.Println("Use decode key: ", string(m.CryptKey))
+func NewTask(output string, url string) (*Downloader, error) {
+	//var err error
+	result, err := parse.FromURL(url)
+	if err != nil {
+		return nil, err
 	}
 	var folder string
 	// if no output folder specified, use current directory
@@ -65,28 +60,28 @@ func NewTask(output string, m *parse.M3u8) (*Task, error) {
 	if err := os.MkdirAll(tsFolder, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("ts folder [%s] create failed: %s", tsFolder, err.Error())
 	}
-	t := &Task{
+	d := &Downloader{
 		folder:   folder,
 		tsFolder: tsFolder,
-		m3u8:     m,
-		codec:    decoder,
+		result:   result,
 	}
-	t.queue = make([]int, 0)
-	for tsIdx := range m.TS {
-		t.queue = append(t.queue, tsIdx)
+	segLen := len(result.M3u8.Segments)
+	d.queue = make([]int, 0)
+	for i := 0; i < segLen; i++ {
+		d.queue = append(d.queue, i)
 	}
-	return t, nil
+	return d, nil
 }
 
-func (t *Task) Do(tsIdx int) error {
-	tsFilename := genTSFilename(tsIdx)
-	b, e := tool.Get(t.tsURL(tsIdx))
+func (d *Downloader) Do(segIndex int) error {
+	tsFilename := genTSFilename(segIndex)
+	b, e := tool.Get(d.tsURL(segIndex))
 	if e != nil {
 		return fmt.Errorf("download %s failed: %s\n", tsFilename, e.Error())
 	}
 	//noinspection GoUnhandledErrorResult
 	defer b.Close()
-	fPath := filepath.Join(t.tsFolder, tsFilename)
+	fPath := filepath.Join(d.tsFolder, tsFilename)
 	fTemp := fPath + tsTempFileSuffix
 	f, err := os.Create(fTemp)
 	if err != nil {
@@ -96,10 +91,17 @@ func (t *Task) Do(tsIdx int) error {
 	if err != nil {
 		return fmt.Errorf("read TS [%s] bytes failed: %s\n", tsFilename, err.Error())
 	}
-	if t.codec != nil {
-		bytes, err = t.codec.Decode(bytes)
-		if err != nil {
-			return fmt.Errorf("decode TS file [%s] failed: %s", tsFilename, err.Error())
+	sf := d.result.M3u8.Segments[segIndex]
+	if sf == nil {
+		return fmt.Errorf("invalid segment index: %d", segIndex)
+	}
+	if sf.Key != nil {
+		key := d.result.Keys[sf.Key]
+		if key != "" {
+			bytes, err = tool.AESDecrypt([]byte(key), bytes)
+			if err != nil {
+				return fmt.Errorf("decryt TS file [%s] failed: %s", tsFilename, err.Error())
+			}
 		}
 	}
 	w := bufio.NewWriter(f)
@@ -109,56 +111,49 @@ func (t *Task) Do(tsIdx int) error {
 	if err = os.Rename(fTemp, fPath); err != nil {
 		return err
 	}
-	atomic.AddInt32(&t.finish, 1)
-	drawProgressBar("Downloading", float32(t.finish)/float32(len(t.m3u8.TS)), progressWidth, tsFilename)
+	atomic.AddInt32(&d.finish, 1)
+	drawProgressBar("Downloading", float32(d.finish)/float32(len(d.result.M3u8.Segments)), progressWidth, tsFilename)
 	return nil
 }
 
-func (t *Task) Next() (tsIdx int, end bool, err error) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	if len(t.queue) == 0 {
+func (d *Downloader) Next() (segIndex int, end bool, err error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	if len(d.queue) == 0 {
 		err = fmt.Errorf("queue empty")
-		if t.finish == int32(len(t.m3u8.TS)) {
+		if d.finish == int32(len(d.result.M3u8.Segments)) {
 			end = true
 			return
 		}
 		end = false
 		return
 	}
-	tsIdx = t.queue[0]
-	t.queue = t.queue[1:]
+	segIndex = d.queue[0]
+	d.queue = d.queue[1:]
 	return
 }
 
-func (t *Task) Back(tsIdx int) error {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	if _, ok := t.m3u8.TS[tsIdx]; !ok {
-		return fmt.Errorf("invalid ts index")
+func (d *Downloader) Back(segIndex int) error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	if sf := d.result.M3u8.Segments[segIndex]; sf == nil {
+		return fmt.Errorf("invalid segment index")
 	}
-	t.queue = append(t.queue, tsIdx)
+	d.queue = append(d.queue, segIndex)
 	return nil
 }
 
-func (t *Task) Merge() error {
-	fmt.Printf("\r")
-	fmt.Printf("Verifying TS files...")
-	var missing bool
-	for tsIdx := range t.m3u8.TS {
-		tsFilename := genTSFilename(tsIdx)
-		f := filepath.Join(t.tsFolder, tsFilename)
+func (d *Downloader) Merge() error {
+	fmt.Println("\nVerifying TS files...")
+	for segIndex := range d.result.M3u8.Segments {
+		tsFilename := genTSFilename(segIndex)
+		f := filepath.Join(d.tsFolder, tsFilename)
 		if _, err := os.Stat(f); err != nil {
-			missing = true
 			fmt.Printf("Missing the TS file：%s\n", tsFilename)
 		}
 	}
-	if missing {
-		return fmt.Errorf("merge TS file failed")
-	}
-
 	// merge all TS files
-	mFile, err := os.Create(filepath.Join(t.folder, mergeTSFilename))
+	mFile, err := os.Create(filepath.Join(d.folder, mergeTSFilename))
 	if err != nil {
 		panic(fmt.Sprintf("merge TS file failed：%s\n", err.Error()))
 	}
@@ -170,8 +165,8 @@ func (t *Task) Merge() error {
 		return err
 	}
 	tsIndexes := make([]int, 0)
-	for idx := range t.m3u8.TS {
-		tsIndexes = append(tsIndexes, idx)
+	for segIndex := range d.result.M3u8.Segments {
+		tsIndexes = append(tsIndexes, segIndex)
 	}
 	// sort indexes
 	sort.Ints(tsIndexes)
@@ -179,19 +174,19 @@ func (t *Task) Merge() error {
 	// TODO: consider using batch merging, divide merging task into multiple sub tasks in goroutine.
 	for _, tsIdx := range tsIndexes {
 		tsFilename := genTSFilename(tsIdx)
-		bytes, err := ioutil.ReadFile(filepath.Join(t.tsFolder, tsFilename))
+		bytes, err := ioutil.ReadFile(filepath.Join(d.tsFolder, tsFilename))
 		s, err := mFile.WriteAt(bytes, ls)
 		if err != nil {
 			return err
 		}
 		ls += int64(s)
 		mergedCount++
-		drawProgressBar("Merging", float32(mergedCount)/float32(len(t.m3u8.TS)), progressWidth, tsFilename)
+		drawProgressBar("Merging", float32(mergedCount)/float32(len(d.result.M3u8.Segments)), progressWidth, tsFilename)
 	}
 	fmt.Println()
 	_ = mFile.Sync()
 	// remove ts folder
-	_ = os.RemoveAll(t.tsFolder)
+	_ = os.RemoveAll(d.tsFolder)
 	return nil
 }
 
@@ -199,12 +194,12 @@ func genTSFilename(ts int) string {
 	return strconv.Itoa(ts) + tsExt
 }
 
-func (t *Task) tsURL(tsIdx int) string {
-	tsURI := t.m3u8.TS[tsIdx]
-	if strings.HasPrefix(tsURI, "https://") || strings.HasPrefix(tsURI, "http://") {
-		return tsURI
+func (d *Downloader) tsURL(segIndex int) string {
+	seg := d.result.M3u8.Segments[segIndex]
+	if strings.HasPrefix(seg.URI, "https://") || strings.HasPrefix(seg.URI, "http://") {
+		return seg.URI
 	}
-	return t.m3u8.BaseURL + "/" + tsURI
+	return tool.BaseURL(d.result.URL, seg.URI, seg.URI)
 }
 
 func drawProgressBar(title string, current float32, width int, suffix ...string) {

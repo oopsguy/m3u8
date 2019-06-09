@@ -6,8 +6,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/oopsguy/m3u8/parse"
-	"github.com/oopsguy/m3u8/task"
+	"github.com/oopsguy/m3u8/dl"
 )
 
 var (
@@ -19,37 +18,33 @@ var (
 )
 
 func init() {
+	flag.StringVar(&url, "u", "", "M3U8 URL, required")
 	flag.IntVar(&chanSize, "c", 25, "Maximum channel size")
 	flag.StringVar(&output, "o", "", "Output folder, required")
-	flag.StringVar(&url, "u", "", "M3U8 URL, required")
 }
 
 func main() {
 	flag.Parse()
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Panic: ", r)
+			fmt.Println("Panic:", r)
 			os.Exit(-1)
 		}
 	}()
 	if url == "" {
-		panic("parameter [url] is required")
+		panic("parameter [u] is required")
 	}
 	if output == "" {
-		panic("parameter [output] is required")
+		panic("parameter [o] is required")
 	}
-	m3u8, err := parse.FromURL(url)
-	if err != nil {
-		panic(fmt.Errorf("parse url failed: %s", err.Error()))
-	}
-	t, err := task.NewTask(output, m3u8)
+	downloader, err := dl.NewTask(output, url)
 	if err != nil {
 		panic(err)
 	}
 	// download TS files
 	rateLimitChan := make(chan byte, chanSize)
 	for {
-		tsIdx, end, err := t.Next()
+		tsIdx, end, err := downloader.Next()
 		if err != nil {
 			if end {
 				break
@@ -59,10 +54,10 @@ func main() {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			if err := t.Do(idx); err != nil {
+			if err := downloader.Do(idx); err != nil {
 				// back into the queue, retry request
 				fmt.Printf(err.Error())
-				if err := t.Back(idx); err != nil {
+				if err := downloader.Back(idx); err != nil {
 					fmt.Printf(err.Error())
 				}
 			}
@@ -71,7 +66,7 @@ func main() {
 		rateLimitChan <- 0
 	}
 	wg.Wait()
-	if err := t.Merge(); err != nil {
+	if err := downloader.Merge(); err != nil {
 		panic(err)
 	}
 	fmt.Println("Done!")

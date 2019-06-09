@@ -1,4 +1,4 @@
-package codec
+package tool
 
 import (
 	"bytes"
@@ -6,33 +6,27 @@ import (
 	"crypto/cipher"
 )
 
-// aesCodec for AES/CBC/PKCS7Padding
-type aesCodec struct {
-	Codec
-	key []byte
-}
-
-func (c *aesCodec) Encode(origin []byte) ([]byte, error) {
-	block, err := aes.NewCipher(c.key)
+func AESEncrypt(key, origin []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
 	blockSize := block.BlockSize()
 	origin = pkcsPadding(origin, blockSize)
-	blockMode := cipher.NewCBCEncrypter(block, c.key[:blockSize])
+	blockMode := cipher.NewCBCEncrypter(block, key[:blockSize])
 	crypted := make([]byte, len(origin))
 	blockMode.CryptBlocks(crypted, origin)
 	return crypted, nil
 }
 
-func (c *aesCodec) Decode(encoded []byte) ([]byte, error) {
-	block, err := aes.NewCipher(c.key)
+func AESDecrypt(key, encypted []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
-	blockModel := cipher.NewCBCDecrypter(block, c.key)
-	plantText := make([]byte, len(encoded))
-	blockModel.CryptBlocks(plantText, encoded)
+	blockModel := cipher.NewCBCDecrypter(block, key)
+	plantText := make([]byte, len(encypted))
+	blockModel.CryptBlocks(plantText, encypted)
 	plantText = pkcs7UnPadding(plantText)
 	return plantText, nil
 }
