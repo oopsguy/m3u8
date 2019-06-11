@@ -40,7 +40,7 @@ m3u8 -h
 
 ## Download
 
-[Binaries and sources](https://github.com/oopsguy/m3u8/releases)
+[Binary packages and source code](https://github.com/oopsguy/m3u8/releases)
 
 ## Screenshots
 
