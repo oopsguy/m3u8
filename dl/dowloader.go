@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/oopsguy/m3u8/parse"
 	"github.com/oopsguy/m3u8/tool"
@@ -137,6 +136,7 @@ func (d *Downloader) download(segIndex int) error {
 	if _, err := w.Write(bytes); err != nil {
 		return fmt.Errorf("write TS bytes failed: %s", err.Error())
 	}
+	_ = f.Close()
 	if err = os.Rename(fTemp, fPath); err != nil {
 		return err
 	}
@@ -176,7 +176,6 @@ func (d *Downloader) back(segIndex int) error {
 }
 
 func (d *Downloader) merge() error {
-	time.Sleep(time.Duration(6) * time.Second)
 	fmt.Println("\nVerifying TS files...")
 	// In fact, the number of downloaded segments should be equal to number of m3u8 segments
 	for segIndex := 0; segIndex < len(d.result.M3u8.Segments); segIndex++ {
