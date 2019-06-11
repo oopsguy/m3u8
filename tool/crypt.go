@@ -6,39 +6,46 @@ import (
 	"crypto/cipher"
 )
 
-func AESEncrypt(key, origin []byte) ([]byte, error) {
+func AES128Encrypt(origData, key, iv []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
 	blockSize := block.BlockSize()
-	origin = pkcsPadding(origin, blockSize)
-	blockMode := cipher.NewCBCEncrypter(block, key[:blockSize])
-	crypted := make([]byte, len(origin))
-	blockMode.CryptBlocks(crypted, origin)
+	if len(iv) == 0 {
+		iv = key
+	}
+	origData = pkcs5Padding(origData, blockSize)
+	blockMode := cipher.NewCBCEncrypter(block, iv[:blockSize])
+	crypted := make([]byte, len(origData))
+	blockMode.CryptBlocks(crypted, origData)
 	return crypted, nil
 }
 
-func AESDecrypt(key, encypted []byte) ([]byte, error) {
+func AES128Decrypt(crypted, key, iv []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
-	blockModel := cipher.NewCBCDecrypter(block, key)
-	plantText := make([]byte, len(encypted))
-	blockModel.CryptBlocks(plantText, encypted)
-	plantText = pkcs7UnPadding(plantText)
-	return plantText, nil
+	blockSize := block.BlockSize()
+	if len(iv) == 0 {
+		iv = key
+	}
+	blockMode := cipher.NewCBCDecrypter(block, iv[:blockSize])
+	origData := make([]byte, len(crypted))
+	blockMode.CryptBlocks(origData, crypted)
+	origData = pkcs5UnPadding(origData)
+	return origData, nil
 }
 
-func pkcs7UnPadding(plantText []byte) []byte {
-	length := len(plantText)
-	unPadding := int(plantText[length-1])
-	return plantText[:(length - unPadding)]
-}
-
-func pkcsPadding(cipherText []byte, blockSize int) []byte {
+func pkcs5Padding(cipherText []byte, blockSize int) []byte {
 	padding := blockSize - len(cipherText)%blockSize
 	padText := bytes.Repeat([]byte{byte(padding)}, padding)
 	return append(cipherText, padText...)
+}
+
+func pkcs5UnPadding(origData []byte) []byte {
+	length := len(origData)
+	unPadding := int(origData[length-1])
+	return origData[:(length - unPadding)]
 }

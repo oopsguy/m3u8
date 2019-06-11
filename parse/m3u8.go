@@ -2,10 +2,8 @@
 package parse
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -58,15 +56,10 @@ type Key struct {
 	// If the encryption method is NONE, the URI and the IV attributes MUST NOT be present
 	Method CryptMethod
 	URI    string
+	IV     string
 }
 
-func FromReader(r io.ReadCloser) (*M3u8, error) {
-	s := bufio.NewScanner(r)
-	var lines []string
-	for s.Scan() {
-		lines = append(lines, s.Text())
-	}
-
+func parseLines(lines []string) (*M3u8, error) {
 	var (
 		i     = 0
 		count = len(lines)
@@ -81,18 +74,20 @@ func FromReader(r io.ReadCloser) (*M3u8, error) {
 		line := strings.TrimSpace(lines[i])
 		if i == 0 {
 			if "#EXTM3U" != line {
-				return nil, fmt.Errorf("invalid m3u8")
+				return nil, fmt.Errorf("invalid m3u8, mssing #EXTM3U in line 1")
 			}
 			continue
 		}
 		switch {
+		case line == "":
+			continue
 		case strings.HasPrefix(line, "#EXT-X-PLAYLIST-TYPE:"):
 			if _, err := fmt.Sscanf(line, "#EXT-X-PLAYLIST-TYPE:%s", &m3u8.PlaylistType); err != nil {
 				return nil, err
 			}
 			isValid := m3u8.PlaylistType == "" || m3u8.PlaylistType == PlaylistTypeVOD || m3u8.PlaylistType == PlaylistTypeEvent
 			if !isValid {
-				return nil, fmt.Errorf("invalid playlist type: %s", m3u8.PlaylistType)
+				return nil, fmt.Errorf("invalid playlist type: %s, line: %d", m3u8.PlaylistType, i+1)
 			}
 		case strings.HasPrefix(line, "#EXT-X-TARGETDURATION:"):
 			if _, err := fmt.Sscanf(line, "#EXT-X-TARGETDURATION:%f", &m3u8.TargetDuration); err != nil {
@@ -114,13 +109,13 @@ func FromReader(r io.ReadCloser) (*M3u8, error) {
 			i++
 			sf.URI = lines[i]
 			if sf.URI == "" || strings.HasPrefix(sf.URI, "#") {
-				return nil, errors.New("invalid EXT-X-STREAM-INF URI")
+				return nil, fmt.Errorf("invalid EXT-X-STREAM-INF URI, line: %d", i+1)
 			}
 			m3u8.StreamInfo = append(m3u8.StreamInfo, sf)
 			continue
 		case strings.HasPrefix(line, "#EXTINF:"):
 			if extInf {
-				return nil, fmt.Errorf("duplicate EXTINF: %s", line)
+				return nil, fmt.Errorf("duplicate EXTINF: %s, line: %d", line, i+1)
 			}
 			if seg == nil {
 				seg = new(Segment)
@@ -143,7 +138,7 @@ func FromReader(r io.ReadCloser) (*M3u8, error) {
 			extInf = true
 		case strings.HasPrefix(line, "#EXT-X-BYTERANGE:"):
 			if extByte {
-				return nil, fmt.Errorf("duplicate EXT-X-BYTERANGE: %s", line)
+				return nil, fmt.Errorf("duplicate EXT-X-BYTERANGE: %s, line: %d", line, i+1)
 			}
 			if seg == nil {
 				seg = new(Segment)
@@ -153,7 +148,7 @@ func FromReader(r io.ReadCloser) (*M3u8, error) {
 				return nil, err
 			}
 			if b == "" {
-				return nil, fmt.Errorf("invalid EXT-X-BYTERANGE")
+				return nil, fmt.Errorf("invalid EXT-X-BYTERANGE, line: %d", i+1)
 			}
 			if strings.Contains(b, "@") {
 				split := strings.Split(b, "@")
@@ -164,11 +159,11 @@ func FromReader(r io.ReadCloser) (*M3u8, error) {
 				seg.Offset = uint64(offset)
 				b = split[0]
 			}
-			lenght, err := strconv.ParseUint(b, 10, 64)
+			length, err := strconv.ParseUint(b, 10, 64)
 			if err != nil {
 				return nil, err
 			}
-			seg.Length = uint64(lenght)
+			seg.Length = uint64(length)
 			extByte = true
 		case !strings.HasPrefix(line, "#"):
 			if extInf {
@@ -185,15 +180,16 @@ func FromReader(r io.ReadCloser) (*M3u8, error) {
 		case strings.HasPrefix(line, "#EXT-X-KEY"):
 			params := parseLineParameters(line)
 			if len(params) == 0 {
-				return nil, fmt.Errorf("invalid EXT-X-KEY: %s", line)
+				return nil, fmt.Errorf("invalid EXT-X-KEY: %s, line: %d", line, i+1)
 			}
 			key = new(Key)
 			method := CryptMethod(params["METHOD"])
 			if method != "" && method != CryptMethodAES && method != CryptMethodNONE {
-				return nil, fmt.Errorf("invalid EXT-X-KEY method: %s", method)
+				return nil, fmt.Errorf("invalid EXT-X-KEY method: %s, line: %d", method, i+1)
 			}
 			key.Method = method
 			key.URI = params["URI"]
+			key.IV = params["IV"]
 		case line == "#EndList":
 			m3u8.EndList = true
 		default:

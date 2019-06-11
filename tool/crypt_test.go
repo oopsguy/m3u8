@@ -5,15 +5,21 @@ import (
 	"testing"
 )
 
-func Test_AESEncrypt_AND_AESDecrypt(t *testing.T) {
-	res, err := AESEncrypt([]byte("0f6845ebafd8d8db"), []byte("HelloWorld"))
+func Test_AES128Encrypt_AND_AES128Decrypt(t *testing.T) {
+	expected := "helloworld"
+	key := "8dv4byf8b9e6bc1x"
+	iv := "xduio1f8a12348u4"
+	encrypt, err := AES128Encrypt([]byte(expected), []byte(key), []byte(iv))
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Printf("Encrypt result: %s\n", string(res))
-	res, err = AESDecrypt([]byte("0f6845ebafd8d8db"), res)
+	decrypt, err := AES128Decrypt(encrypt, []byte(key), []byte(iv))
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Printf("Decrypt result: %s\n", res)
+	de := string(decrypt)
+	if de != expected {
+		t.Errorf("expected: %s, result: %s", expected, de)
+	}
+	fmt.Printf("Decrypt result: %s\n", de)
 }

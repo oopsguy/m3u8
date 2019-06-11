@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"path"
@@ -19,15 +20,22 @@ func CurrentDir(joinPath ...string) (string, error) {
 	return whole, nil
 }
 
-func BaseURL(u *url.URL, p string, join ...string) string {
+func ResolveURL(u *url.URL, p string) string {
+	if strings.HasPrefix(p, "https://") || strings.HasPrefix(p, "http://") {
+		return p
+	}
 	var baseURL string
 	if strings.Index(p, "/") == 0 {
 		baseURL = u.Scheme + "://" + u.Host
 	} else {
 		baseURL = u.String()[0:strings.LastIndex(u.String(), "/")]
 	}
-	if join != nil {
-		return baseURL + "/" + path.Join(join...)
-	}
-	return baseURL
+	return baseURL + path.Join("/", p)
+}
+
+func DrawProgressBar(prefix string, proportion float32, width int, suffix ...string) {
+	pos := int(proportion * float32(width))
+	s := fmt.Sprintf("%s [%s%*s] %6.2f%% %s",
+		prefix, strings.Repeat("■", pos), width-pos, "", proportion*100, strings.Join(suffix, ""))
+	fmt.Print("\r" + s)
 }
