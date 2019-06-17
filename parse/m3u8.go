@@ -15,8 +15,8 @@ type (
 )
 
 const (
-	PlaylistTypeVOD   = "VOD"
-	PlaylistTypeEvent = "EVENT"
+	PlaylistTypeVOD   PlaylistType = "VOD"
+	PlaylistTypeEvent PlaylistType = "EVENT"
 
 	CryptMethodAES  CryptMethod = "AES-128"
 	CryptMethodNONE CryptMethod = "NONE"
@@ -26,7 +26,7 @@ type M3u8 struct {
 	Version        int8   // EXT-X-VERSION:version
 	MediaSequence  uint64 // Default 0, #EXT-X-MEDIA-SEQUENCE:sequence
 	Segments       []*Segment
-	StreamInfo     []*StreamInfo
+	MasterPlaylist []*MasterPlaylist
 	EndList        bool         // #EXT-X-ENDLIST
 	PlaylistType   PlaylistType // VOD or EVENT
 	TargetDuration float64      // #EXT-X-TARGETDURATION:duration
@@ -42,7 +42,7 @@ type Segment struct {
 }
 
 // #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=240000,RESOLUTION=416x234,CODECS="avc1.42e00a,mp4a.40.2"
-type StreamInfo struct {
+type MasterPlaylist struct {
 	URI        string
 	BandWidth  uint32
 	Resolution string
@@ -74,7 +74,7 @@ func parseLines(lines []string) (*M3u8, error) {
 		line := strings.TrimSpace(lines[i])
 		if i == 0 {
 			if "#EXTM3U" != line {
-				return nil, fmt.Errorf("invalid m3u8, mssing #EXTM3U in line 1")
+				return nil, fmt.Errorf("invalid m3u8, missing #EXTM3U in line 1")
 			}
 			continue
 		}
@@ -102,16 +102,16 @@ func parseLines(lines []string) (*M3u8, error) {
 				return nil, err
 			}
 		case strings.HasPrefix(line, "#EXT-X-STREAM-INF:"):
-			sf, err := parseStreamInfo(line)
+			mp, err := parseStreamInfo(line)
 			if err != nil {
 				return nil, err
 			}
 			i++
-			sf.URI = lines[i]
-			if sf.URI == "" || strings.HasPrefix(sf.URI, "#") {
+			mp.URI = lines[i]
+			if mp.URI == "" || strings.HasPrefix(mp.URI, "#") {
 				return nil, fmt.Errorf("invalid EXT-X-STREAM-INF URI, line: %d", i+1)
 			}
-			m3u8.StreamInfo = append(m3u8.StreamInfo, sf)
+			m3u8.MasterPlaylist = append(m3u8.MasterPlaylist, mp)
 			continue
 		case strings.HasPrefix(line, "#EXTINF:"):
 			if extInf {
@@ -199,12 +199,12 @@ func parseLines(lines []string) (*M3u8, error) {
 	return m3u8, nil
 }
 
-func parseStreamInfo(line string) (*StreamInfo, error) {
+func parseStreamInfo(line string) (*MasterPlaylist, error) {
 	params := parseLineParameters(line)
 	if len(params) == 0 {
 		return nil, errors.New("empty parameter")
 	}
-	si := new(StreamInfo)
+	mp := new(MasterPlaylist)
 	for k, v := range params {
 		switch {
 		case k == "BANDWIDTH":
@@ -212,20 +212,20 @@ func parseStreamInfo(line string) (*StreamInfo, error) {
 			if err != nil {
 				return nil, err
 			}
-			si.BandWidth = uint32(v)
+			mp.BandWidth = uint32(v)
 		case k == "RESOLUTION":
-			si.Resolution = v
+			mp.Resolution = v
 		case k == "PROGRAM-ID":
 			v, err := strconv.ParseUint(v, 10, 32)
 			if err != nil {
 				return nil, err
 			}
-			si.ProgramID = uint32(v)
+			mp.ProgramID = uint32(v)
 		case k == "CODECS":
-			si.Codecs = v
+			mp.Codecs = v
 		}
 	}
-	return si, nil
+	return mp, nil
 }
 
 var linePattern = regexp.MustCompile(`([a-zA-Z-]+)=("[^"]+"|[^",]+)`)

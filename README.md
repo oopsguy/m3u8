@@ -1,20 +1,29 @@
 # M3u8
 
-M3u8 - a mini m3u8 downloader written in Golang for downloading and merging TS files.
+M3u8 - a mini m3u8 downloader written in Golang for downloading and merging TS(Transport Stream) files.
 
-> Encrypted m3u8 is partial supported.
+You only need to specify the flags(`u`, `o`, `c`) to run, downloader will automatically download the m3u8 and parse it, 
+then download and merge all TS files.
+
+
+## Features
+
+- Download and parse m3u8（VOD）
+- Support Master playlist
+- Support encrypted TS
+- Support merge TS
 
 ## Usage
 
-**install**
+**installation**
 
-```bash
+```
 go get -u github.com/oopsguy/m3u8
 ```
 
 **build**
 
-```bash
+```
 go build
 ```
 
@@ -46,7 +55,12 @@ m3u8 -h
 
 ![Demo](./screenshots/demo.gif)
 
+## References
 
-## License 
+- [HTTP Live Streaming draft-pantos-http-live-streaming-23](https://tools.ietf.org/html/draft-pantos-http-live-streaming-23#section-4.3.4.2)
+- [MPEG transport stream - Wikipedia](https://en.wikipedia.org/wiki/MPEG_transport_stream)
 
-MIT License
+
+## License
+
+[MIT License](./LICENSE)

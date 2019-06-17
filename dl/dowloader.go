@@ -29,6 +29,7 @@ type Downloader struct {
 	folder   string
 	tsFolder string
 	finish   int32
+	segLen   int
 
 	result *parse.Result
 }
@@ -61,17 +62,14 @@ func NewTask(output string, url string) (*Downloader, error) {
 		tsFolder: tsFolder,
 		result:   result,
 	}
-	segLen := len(result.M3u8.Segments)
-	d.queue = make([]int, 0)
-	for i := 0; i < segLen; i++ {
-		d.queue = append(d.queue, i)
-	}
+	d.segLen = len(result.M3u8.Segments)
+	d.queue = genSlice(d.segLen)
 	return d, nil
 }
 
-func (d *Downloader) Start(maxCon int) error {
+func (d *Downloader) Start(concurrency int) error {
 	var wg sync.WaitGroup
-	limitChan := make(chan byte, maxCon)
+	limitChan := make(chan byte, concurrency)
 	for {
 		tsIdx, end, err := d.next()
 		if err != nil {
@@ -92,7 +90,7 @@ func (d *Downloader) Start(maxCon int) error {
 			}
 			<-limitChan
 		}(tsIdx)
-		limitChan <- 0
+		limitChan <- 1
 	}
 	wg.Wait()
 	if err := d.merge(); err != nil {
@@ -132,6 +130,18 @@ func (d *Downloader) download(segIndex int) error {
 			}
 		}
 	}
+
+	// https://en.wikipedia.org/wiki/MPEG_transport_stream
+	// Some TS files do not start with SyncByte 0x47, they can not be played after merging,
+	// Need to remove the bytes before the SyncByte 0x47(71).
+	syncByte := uint8(71) //0x47
+	bLen := len(bytes)
+	for j := 0; j < bLen; j++ {
+		if bytes[j] == syncByte {
+			bytes = bytes[j:]
+			break
+		}
+	}
 	w := bufio.NewWriter(f)
 	if _, err := w.Write(bytes); err != nil {
 		return fmt.Errorf("write TS bytes failed: %s", err.Error())
@@ -143,7 +153,7 @@ func (d *Downloader) download(segIndex int) error {
 	// Maybe it will be safer in this way...
 	atomic.AddInt32(&d.finish, 1)
 	tool.DrawProgressBar("Downloading",
-		float32(d.finish)/float32(len(d.result.M3u8.Segments)), progressWidth, tsFilename)
+		float32(d.finish)/float32(d.segLen), progressWidth, tsFilename)
 	return nil
 }
 
@@ -152,7 +162,7 @@ func (d *Downloader) next() (segIndex int, end bool, err error) {
 	defer d.lock.Unlock()
 	if len(d.queue) == 0 {
 		err = fmt.Errorf("queue empty")
-		if d.finish == int32(len(d.result.M3u8.Segments)) {
+		if d.finish == int32(d.segLen) {
 			end = true
 			return
 		}
@@ -176,10 +186,9 @@ func (d *Downloader) back(segIndex int) error {
 }
 
 func (d *Downloader) merge() error {
-	fmt.Println("\nVerifying TS files...")
 	// In fact, the number of downloaded segments should be equal to number of m3u8 segments
-	for segIndex := 0; segIndex < len(d.result.M3u8.Segments); segIndex++ {
-		tsFilename := tsFilename(segIndex)
+	for idx := 0; idx < d.segLen; idx++ {
+		tsFilename := tsFilename(idx)
 		f := filepath.Join(d.tsFolder, tsFilename)
 		if _, err := os.Stat(f); err != nil {
 			fmt.Printf("Missing the TS file：%s\n", tsFilename)
@@ -188,7 +197,7 @@ func (d *Downloader) merge() error {
 	// Create a TS file for merging, all segment files will be written to this file.
 	mFile, err := os.Create(filepath.Join(d.folder, mergeTSFilename))
 	if err != nil {
-		panic(fmt.Sprintf("merge TS file failed：%s", err.Error()))
+		return fmt.Errorf("merge TS files failed：%s", err.Error())
 	}
 	//noinspection GoUnhandledErrorResult
 	defer mFile.Close()
@@ -219,6 +228,38 @@ func (d *Downloader) merge() error {
 	return nil
 }
 
+func (d *Downloader) rangeMerge(start, end int) error {
+	if start < 0 || end > d.segLen-1 {
+		return fmt.Errorf("invalid segment index range：%d,%d", start, end)
+	}
+	if end-start < 2 {
+		return nil
+	}
+	mFilename := tsFilename(start)
+	mFile, err := os.Create(filepath.Join(d.tsFolder, mFilename))
+	if err != nil {
+		return fmt.Errorf("merge TS files failed：%s", err.Error())
+	}
+	//noinspection GoUnhandledErrorResult
+	defer mFile.Close()
+	// Move to EOF
+	ls, err := mFile.Seek(0, io.SeekEnd)
+	if err != nil {
+		return err
+	}
+	for idx := start + 1; idx <= end; idx++ {
+		tsFilename := tsFilename(idx)
+		bytes, err := ioutil.ReadFile(filepath.Join(d.tsFolder, tsFilename))
+		s, err := mFile.WriteAt(bytes, ls)
+		if err != nil {
+			return err
+		}
+		ls += int64(s)
+	}
+	_ = mFile.Sync()
+	return nil
+}
+
 func (d *Downloader) tsURL(segIndex int) string {
 	seg := d.result.M3u8.Segments[segIndex]
 	return tool.ResolveURL(d.result.URL, seg.URI)
@@ -226,4 +267,12 @@ func (d *Downloader) tsURL(segIndex int) string {
 
 func tsFilename(ts int) string {
 	return strconv.Itoa(ts) + tsExt
+}
+
+func genSlice(len int) []int {
+	s := make([]int, 0)
+	for i := 0; i < len; i++ {
+		s = append(s, i)
+	}
+	return s
 }

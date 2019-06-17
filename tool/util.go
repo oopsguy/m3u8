@@ -28,7 +28,8 @@ func ResolveURL(u *url.URL, p string) string {
 	if strings.Index(p, "/") == 0 {
 		baseURL = u.Scheme + "://" + u.Host
 	} else {
-		baseURL = u.String()[0:strings.LastIndex(u.String(), "/")]
+		tU := u.String()
+		baseURL = tU[0:strings.LastIndex(tU, "/")]
 	}
 	return baseURL + path.Join("/", p)
 }
