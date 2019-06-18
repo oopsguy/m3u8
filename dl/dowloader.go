@@ -19,7 +19,7 @@ const (
 	tsExt            = ".ts"
 	tsFolderName     = "ts"
 	mergeTSFilename  = "merged.ts"
-	tsTempFileSuffix = "_temp"
+	tsTempFileSuffix = "_tmp"
 	progressWidth    = 40
 )
 
@@ -208,7 +208,6 @@ func (d *Downloader) merge() error {
 	}
 	fmt.Print("/r")
 	mergedCount := 0
-	// TODO: consider using batch merging, divide merging task into multiple sub tasks in goroutine.
 	for segIndex := 0; segIndex < len(d.result.M3u8.Segments); segIndex++ {
 		tsFilename := tsFilename(segIndex)
 		bytes, err := ioutil.ReadFile(filepath.Join(d.tsFolder, tsFilename))

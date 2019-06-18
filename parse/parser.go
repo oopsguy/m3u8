@@ -37,8 +37,8 @@ func FromURL(link string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if m3u8.StreamInfo != nil {
-		sf := m3u8.StreamInfo[0]
+	if len(m3u8.MasterPlaylist) != 0 {
+		sf := m3u8.MasterPlaylist[0]
 		return FromURL(tool.ResolveURL(u, sf.URI))
 	}
 	if len(m3u8.Segments) == 0 {

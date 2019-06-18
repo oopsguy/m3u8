@@ -22,6 +22,8 @@ const (
 	CryptMethodNONE CryptMethod = "NONE"
 )
 
+var linePattern = regexp.MustCompile(`([a-zA-Z-]+)=("[^"]+"|[^",]+)`)
+
 type M3u8 struct {
 	Version        int8   // EXT-X-VERSION:version
 	MediaSequence  uint64 // Default 0, #EXT-X-MEDIA-SEQUENCE:sequence
@@ -227,8 +229,6 @@ func parseStreamInfo(line string) (*MasterPlaylist, error) {
 	}
 	return mp, nil
 }
-
-var linePattern = regexp.MustCompile(`([a-zA-Z-]+)=("[^"]+"|[^",]+)`)
 
 func parseLineParameters(line string) map[string]string {
 	r := linePattern.FindAllStringSubmatch(line, -1)

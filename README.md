@@ -9,9 +9,9 @@ then download and merge all TS files.
 ## Features
 
 - Download and parse m3u8（VOD）
-- Support Master playlist
-- Support encrypted TS
-- Support merge TS
+- Parse Master playlist
+- Decrypt TS
+- Merge TS
 
 ## Usage
 
@@ -38,7 +38,7 @@ Linux & MacOS
 Windows PowerShell
 
 ```
-.\m3u8 -u="http://example.com/index.m3u8" -o="D:\data\example"
+.\m3u8.exe -u="http://example.com/index.m3u8" -o="D:\data\example"
 ```
 
 **help**
