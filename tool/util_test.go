@@ -1,7 +1,6 @@
 package tool
 
 import (
-	"fmt"
 	"net/url"
 	"testing"
 )
@@ -12,22 +11,22 @@ func TestResolveURL(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
 	result := ResolveURL(u, "videos/111111.ts")
 	expected := "http://www.example.com/test/videos/111111.ts"
 	if result != expected {
-		t.Error(fmt.Errorf("wrong URL, expected: %s, result: %s", expected, result))
+		t.Fatalf("wrong URL, expected: %s, result: %s", expected, result)
 	}
-	fmt.Printf("expected: %s, result: %s\n", expected, result)
+
 	result = ResolveURL(u, "/videos/2222222.ts")
 	expected = "http://www.example.com/videos/2222222.ts"
 	if result != expected {
-		t.Error(fmt.Errorf("wrong URL, expected: %s, result: %s", expected, result))
+		t.Fatalf("wrong URL, expected: %s, result: %s", expected, result)
 	}
-	fmt.Printf("expected: %s, result: %s\n", expected, result)
+
 	result = ResolveURL(u, "https://test.com/11111.key")
 	expected = "https://test.com/11111.key"
 	if result != expected {
-		t.Error(fmt.Errorf("wrong URL, expected: %s, result: %s", expected, result))
+		t.Fatalf("wrong URL, expected: %s, result: %s", expected, result)
 	}
-	fmt.Printf("expected: %s, result: %s\n", expected, result)
 }

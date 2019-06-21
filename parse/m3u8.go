@@ -2,8 +2,10 @@
 package parse
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,6 +24,7 @@ const (
 	CryptMethodNONE CryptMethod = "NONE"
 )
 
+// regex pattern for extracting `key=value` parameters from a line
 var linePattern = regexp.MustCompile(`([a-zA-Z-]+)=("[^"]+"|[^",]+)`)
 
 type M3u8 struct {
@@ -61,7 +64,13 @@ type Key struct {
 	IV     string
 }
 
-func parseLines(lines []string) (*M3u8, error) {
+func parse(reader io.Reader) (*M3u8, error) {
+	s := bufio.NewScanner(reader)
+	var lines []string
+	for s.Scan() {
+		lines = append(lines, s.Text())
+	}
+
 	var (
 		i     = 0
 		count = len(lines)
@@ -72,6 +81,7 @@ func parseLines(lines []string) (*M3u8, error) {
 		extInf  bool
 		extByte bool
 	)
+
 	for ; i < count; i++ {
 		line := strings.TrimSpace(lines[i])
 		if i == 0 {
@@ -104,7 +114,7 @@ func parseLines(lines []string) (*M3u8, error) {
 				return nil, err
 			}
 		case strings.HasPrefix(line, "#EXT-X-STREAM-INF:"):
-			mp, err := parseStreamInfo(line)
+			mp, err := parseMasterPlaylist(line)
 			if err != nil {
 				return nil, err
 			}
@@ -198,10 +208,11 @@ func parseLines(lines []string) (*M3u8, error) {
 			continue
 		}
 	}
+
 	return m3u8, nil
 }
 
-func parseStreamInfo(line string) (*MasterPlaylist, error) {
+func parseMasterPlaylist(line string) (*MasterPlaylist, error) {
 	params := parseLineParameters(line)
 	if len(params) == 0 {
 		return nil, errors.New("empty parameter")
@@ -230,6 +241,7 @@ func parseStreamInfo(line string) (*MasterPlaylist, error) {
 	return mp, nil
 }
 
+// parseLineParameters extra parameters in string `line`
 func parseLineParameters(line string) map[string]string {
 	r := linePattern.FindAllStringSubmatch(line, -1)
 	params := make(map[string]string)

@@ -1,7 +1,6 @@
 package tool
 
 import (
-	"fmt"
 	"io/ioutil"
 	"testing"
 )
@@ -12,9 +11,8 @@ func TestGet(t *testing.T) {
 		t.Error(err)
 	}
 	defer body.Close()
-	bytes, err := ioutil.ReadAll(body)
+	_, err = ioutil.ReadAll(body)
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println(string(bytes))
 }

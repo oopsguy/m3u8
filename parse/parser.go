@@ -1,7 +1,6 @@
 package parse
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -28,12 +27,7 @@ func FromURL(link string) (*Result, error) {
 	}
 	//noinspection GoUnhandledErrorResult
 	defer body.Close()
-	s := bufio.NewScanner(body)
-	var lines []string
-	for s.Scan() {
-		lines = append(lines, s.Text())
-	}
-	m3u8, err := parseLines(lines)
+	m3u8, err := parse(body)
 	if err != nil {
 		return nil, err
 	}

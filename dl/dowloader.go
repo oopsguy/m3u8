@@ -3,7 +3,6 @@ package dl
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -34,6 +33,7 @@ type Downloader struct {
 	result *parse.Result
 }
 
+// NewTask returns a Task instance
 func NewTask(output string, url string) (*Downloader, error) {
 	result, err := parse.FromURL(url)
 	if err != nil {
@@ -67,6 +67,7 @@ func NewTask(output string, url string) (*Downloader, error) {
 	return d, nil
 }
 
+// Start runs downloader
 func (d *Downloader) Start(concurrency int) error {
 	var wg sync.WaitGroup
 	limitChan := make(chan byte, concurrency)
@@ -130,7 +131,6 @@ func (d *Downloader) download(segIndex int) error {
 			}
 		}
 	}
-
 	// https://en.wikipedia.org/wiki/MPEG_transport_stream
 	// Some TS files do not start with SyncByte 0x47, they can not be played after merging,
 	// Need to remove the bytes before the SyncByte 0x47(71).
@@ -146,6 +146,7 @@ func (d *Downloader) download(segIndex int) error {
 	if _, err := w.Write(bytes); err != nil {
 		return fmt.Errorf("write TS bytes failed: %s", err.Error())
 	}
+	// Release file resource to rename file
 	_ = f.Close()
 	if err = os.Rename(fTemp, fPath); err != nil {
 		return err
@@ -153,7 +154,7 @@ func (d *Downloader) download(segIndex int) error {
 	// Maybe it will be safer in this way...
 	atomic.AddInt32(&d.finish, 1)
 	tool.DrawProgressBar("Downloading",
-		float32(d.finish)/float32(d.segLen), progressWidth, tsFilename)
+		float32(d.finish)/float32(d.segLen), progressWidth)
 	return nil
 }
 
@@ -187,75 +188,44 @@ func (d *Downloader) back(segIndex int) error {
 
 func (d *Downloader) merge() error {
 	// In fact, the number of downloaded segments should be equal to number of m3u8 segments
+	missingCount := 0
 	for idx := 0; idx < d.segLen; idx++ {
 		tsFilename := tsFilename(idx)
 		f := filepath.Join(d.tsFolder, tsFilename)
 		if _, err := os.Stat(f); err != nil {
-			fmt.Printf("Missing the TS file：%s\n", tsFilename)
+			missingCount++
 		}
 	}
+	if missingCount > 0 {
+		fmt.Printf("Warning: %d TS files missing\n", missingCount)
+	}
+
 	// Create a TS file for merging, all segment files will be written to this file.
 	mFile, err := os.Create(filepath.Join(d.folder, mergeTSFilename))
 	if err != nil {
-		return fmt.Errorf("merge TS files failed：%s", err.Error())
+		return fmt.Errorf("create main TS file failed：%s", err.Error())
 	}
 	//noinspection GoUnhandledErrorResult
 	defer mFile.Close()
-	// Move to EOF
-	ls, err := mFile.Seek(0, io.SeekEnd)
-	if err != nil {
-		return err
-	}
-	fmt.Print("/r")
+
+	writer := bufio.NewWriter(mFile)
 	mergedCount := 0
 	for segIndex := 0; segIndex < len(d.result.M3u8.Segments); segIndex++ {
 		tsFilename := tsFilename(segIndex)
 		bytes, err := ioutil.ReadFile(filepath.Join(d.tsFolder, tsFilename))
-		s, err := mFile.WriteAt(bytes, ls)
+		_, err = writer.Write(bytes)
 		if err != nil {
 			return err
 		}
-		ls += int64(s)
 		mergedCount++
 		tool.DrawProgressBar("Merging",
-			float32(mergedCount)/float32(len(d.result.M3u8.Segments)), progressWidth, tsFilename)
+			float32(mergedCount)/float32(len(d.result.M3u8.Segments)), progressWidth)
 	}
+	_ = writer.Flush()
+
 	fmt.Println()
-	_ = mFile.Sync()
 	// Remove `ts` folder
 	_ = os.RemoveAll(d.tsFolder)
-	return nil
-}
-
-func (d *Downloader) rangeMerge(start, end int) error {
-	if start < 0 || end > d.segLen-1 {
-		return fmt.Errorf("invalid segment index range：%d,%d", start, end)
-	}
-	if end-start < 2 {
-		return nil
-	}
-	mFilename := tsFilename(start)
-	mFile, err := os.Create(filepath.Join(d.tsFolder, mFilename))
-	if err != nil {
-		return fmt.Errorf("merge TS files failed：%s", err.Error())
-	}
-	//noinspection GoUnhandledErrorResult
-	defer mFile.Close()
-	// Move to EOF
-	ls, err := mFile.Seek(0, io.SeekEnd)
-	if err != nil {
-		return err
-	}
-	for idx := start + 1; idx <= end; idx++ {
-		tsFilename := tsFilename(idx)
-		bytes, err := ioutil.ReadFile(filepath.Join(d.tsFolder, tsFilename))
-		s, err := mFile.WriteAt(bytes, ls)
-		if err != nil {
-			return err
-		}
-		ls += int64(s)
-	}
-	_ = mFile.Sync()
 	return nil
 }
 
