@@ -24,7 +24,7 @@ func main() {
 	flag.Parse()
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Panic:", r)
+			fmt.Println("[error]", r)
 			os.Exit(-1)
 		}
 	}()

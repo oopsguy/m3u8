@@ -8,25 +8,20 @@ You only need to specify the flags(`u`, `o`, `c`) to run, downloader will automa
 ## Features
 
 - Download and parse m3u8（VOD）
+- Retry on download TS failure
 - Parse Master playlist
 - Decrypt TS
 - Merge TS
 
 ## Usage
 
-**installation**
+### source
 
-```
-go get -u github.com/oopsguy/m3u8
-```
-
-**build**
-
-```
-go build
+```bash
+go run main.go -u=http://example.com/index.m3u8 -o=/data/example
 ```
 
-**run**
+### binary:
 
 Linux & MacOS
 
@@ -40,15 +35,9 @@ Windows PowerShell
 .\m3u8.exe -u="http://example.com/index.m3u8" -o="D:\data\example"
 ```
 
-**help**
-
-```bash
-m3u8 -h
-```
-
 ## Download
 
-[Binary packages and source code](https://github.com/oopsguy/m3u8/releases)
+[Binary packages](https://github.com/oopsguy/m3u8/releases)
 
 ## Screenshots
 

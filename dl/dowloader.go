@@ -17,7 +17,7 @@ import (
 const (
 	tsExt            = ".ts"
 	tsFolderName     = "ts"
-	mergeTSFilename  = "merged.ts"
+	mergeTSFilename  = "main.ts"
 	tsTempFileSuffix = "_tmp"
 	progressWidth    = 40
 )
@@ -55,7 +55,7 @@ func NewTask(output string, url string) (*Downloader, error) {
 	}
 	tsFolder := filepath.Join(folder, tsFolderName)
 	if err := os.MkdirAll(tsFolder, os.ModePerm); err != nil {
-		return nil, fmt.Errorf("ts folder [%s] create failed: %s", tsFolder, err.Error())
+		return nil, fmt.Errorf("create ts folder '[%s]' failed: %s", tsFolder, err.Error())
 	}
 	d := &Downloader{
 		folder:   folder,
@@ -84,7 +84,7 @@ func (d *Downloader) Start(concurrency int) error {
 			defer wg.Done()
 			if err := d.download(idx); err != nil {
 				// Back into the queue, retry request
-				fmt.Printf("%s\n", err.Error())
+				fmt.Printf("[failed] %s\n", err.Error())
 				if err := d.back(idx); err != nil {
 					fmt.Printf(err.Error())
 				}
@@ -102,9 +102,10 @@ func (d *Downloader) Start(concurrency int) error {
 
 func (d *Downloader) download(segIndex int) error {
 	tsFilename := tsFilename(segIndex)
-	b, e := tool.Get(d.tsURL(segIndex))
+	tsUrl := d.tsURL(segIndex)
+	b, e := tool.Get(tsUrl)
 	if e != nil {
-		return fmt.Errorf("download %s failed: %s", tsFilename, e.Error())
+		return fmt.Errorf("download failed %s, %s", tsUrl, e.Error())
 	}
 	//noinspection GoUnhandledErrorResult
 	defer b.Close()
@@ -112,11 +113,11 @@ func (d *Downloader) download(segIndex int) error {
 	fTemp := fPath + tsTempFileSuffix
 	f, err := os.Create(fTemp)
 	if err != nil {
-		return fmt.Errorf("create TS file failed: %s", err.Error())
+		return fmt.Errorf("create file failed: %s, %s", tsFilename, err.Error())
 	}
 	bytes, err := ioutil.ReadAll(b)
 	if err != nil {
-		return fmt.Errorf("read TS  bytes failed: %s", err.Error())
+		return fmt.Errorf("read bytes failed: %s, %s", tsUrl, err.Error())
 	}
 	sf := d.result.M3u8.Segments[segIndex]
 	if sf == nil {
@@ -127,7 +128,7 @@ func (d *Downloader) download(segIndex int) error {
 		if key != "" {
 			bytes, err = tool.AES128Decrypt(bytes, []byte(key), []byte(sf.Key.IV))
 			if err != nil {
-				return fmt.Errorf("decryt TS failed: %s", err.Error())
+				return fmt.Errorf("decryt failed: %s, %s", tsUrl, err.Error())
 			}
 		}
 	}
@@ -153,8 +154,8 @@ func (d *Downloader) download(segIndex int) error {
 	}
 	// Maybe it will be safer in this way...
 	atomic.AddInt32(&d.finish, 1)
-	tool.DrawProgressBar("Downloading",
-		float32(d.finish)/float32(d.segLen), progressWidth)
+	//tool.DrawProgressBar("Downloading", float32(d.finish)/float32(d.segLen), progressWidth)
+	fmt.Printf("[download %6.2f%%] %s\n", float32(d.finish)/float32(d.segLen)*100, tsUrl)
 	return nil
 }
 
@@ -197,11 +198,12 @@ func (d *Downloader) merge() error {
 		}
 	}
 	if missingCount > 0 {
-		fmt.Printf("Warning: %d TS files missing\n", missingCount)
+		fmt.Printf("[warning] %d files missing\n", missingCount)
 	}
 
 	// Create a TS file for merging, all segment files will be written to this file.
-	mFile, err := os.Create(filepath.Join(d.folder, mergeTSFilename))
+	mFilePath := filepath.Join(d.folder, mergeTSFilename)
+	mFile, err := os.Create(mFilePath)
 	if err != nil {
 		return fmt.Errorf("create main TS file failed：%s", err.Error())
 	}
@@ -210,22 +212,27 @@ func (d *Downloader) merge() error {
 
 	writer := bufio.NewWriter(mFile)
 	mergedCount := 0
-	for segIndex := 0; segIndex < len(d.result.M3u8.Segments); segIndex++ {
+	for segIndex := 0; segIndex < d.segLen; segIndex++ {
 		tsFilename := tsFilename(segIndex)
 		bytes, err := ioutil.ReadFile(filepath.Join(d.tsFolder, tsFilename))
 		_, err = writer.Write(bytes)
 		if err != nil {
-			return err
+			continue
 		}
 		mergedCount++
-		tool.DrawProgressBar("Merging",
-			float32(mergedCount)/float32(len(d.result.M3u8.Segments)), progressWidth)
+		tool.DrawProgressBar("merge",
+			float32(mergedCount)/float32(d.segLen), progressWidth)
 	}
 	_ = writer.Flush()
-
-	fmt.Println()
 	// Remove `ts` folder
 	_ = os.RemoveAll(d.tsFolder)
+
+	if mergedCount != d.segLen {
+		fmt.Printf("[warning] \n%d files merge failed", d.segLen-mergedCount)
+	}
+
+	fmt.Printf("\n[output] %s\n", mFilePath)
+
 	return nil
 }
 
