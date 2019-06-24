@@ -21,7 +21,7 @@ go run main.go -u=http://example.com/index.m3u8 -o=/data/example
 
 ### 二进制方式:
 
-Linux & MacOS
+Linux 和 MacOS
 
 ```
 ./m3u8 -u=http://example.com/index.m3u8 -o=/data/example
@@ -41,6 +41,8 @@ Windows PowerShell
 - c 下载协程并发数，默认 25
 ```
 
+部分链接可能限制请求频率，可根据实际情况调整 `c` 参数的值。
+
 ## 下载
 
 [二进制文件](https://github.com/oopsguy/m3u8/releases)
@@ -51,6 +53,7 @@ Windows PowerShell
 
 ## 参考资料
 
+- [TS科普 2 包头](https://blog.csdn.net/cabbage2008/article/details/49281729)
 - [HTTP Live Streaming draft-pantos-http-live-streaming-23](https://tools.ietf.org/html/draft-pantos-http-live-streaming-23#section-4.3.4.2)
 - [MPEG transport stream - Wikipedia](https://en.wikipedia.org/wiki/MPEG_transport_stream)
 
