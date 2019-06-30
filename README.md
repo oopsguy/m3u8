@@ -1,6 +1,6 @@
-# M3u8
+# M3U8
 
-M3u8 - a mini M3U8 downloader written in Golang for downloading and merging TS(Transport Stream) files.
+M3U8 - a mini M3U8 downloader written in Golang for downloading and merging TS(Transport Stream) files.
 
 You only need to specify the flags(`u`, `o`, `c`) to run, downloader will automatically download all TS files and consolidate them into a single TS file.
 

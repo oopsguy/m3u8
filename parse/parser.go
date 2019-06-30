@@ -12,7 +12,7 @@ import (
 type Result struct {
 	URL  *url.URL
 	M3u8 *M3u8
-	Keys map[*Key]string
+	Keys map[int]string
 }
 
 func FromURL(link string) (*Result, error) {
@@ -41,19 +41,16 @@ func FromURL(link string) (*Result, error) {
 	result := &Result{
 		URL:  u,
 		M3u8: m3u8,
-		Keys: make(map[*Key]string),
+		Keys: make(map[int]string),
 	}
 
-	for _, seg := range m3u8.Segments {
+	for idx, key := range m3u8.Keys {
 		switch {
-		case seg.Key == nil || seg.Key.Method == "" || seg.Key.Method == CryptMethodNONE:
+		case key.Method == "" || key.Method == CryptMethodNONE:
 			continue
-		case seg.Key.Method == CryptMethodAES:
-			if _, ok := result.Keys[seg.Key]; ok {
-				continue
-			}
+		case key.Method == CryptMethodAES:
 			// Request URL to extract decryption key
-			keyURL := seg.Key.URI
+			keyURL := key.URI
 			keyURL = tool.ResolveURL(u, keyURL)
 			resp, err := tool.Get(keyURL)
 			if err != nil {
@@ -65,9 +62,9 @@ func FromURL(link string) (*Result, error) {
 				return nil, err
 			}
 			fmt.Println("decryption key: ", string(keyByte))
-			result.Keys[seg.Key] = string(keyByte)
+			result.Keys[idx] = string(keyByte)
 		default:
-			return nil, fmt.Errorf("unknown or unsupported cryption method: %s", seg.Key.Method)
+			return nil, fmt.Errorf("unknown or unsupported cryption method: %s", key.Method)
 		}
 	}
 	return result, nil

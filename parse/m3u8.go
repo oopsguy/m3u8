@@ -32,6 +32,7 @@ type M3u8 struct {
 	MediaSequence  uint64 // Default 0, #EXT-X-MEDIA-SEQUENCE:sequence
 	Segments       []*Segment
 	MasterPlaylist []*MasterPlaylist
+	Keys           map[int]*Key
 	EndList        bool         // #EXT-X-ENDLIST
 	PlaylistType   PlaylistType // VOD or EVENT
 	TargetDuration float64      // #EXT-X-TARGETDURATION:duration
@@ -39,7 +40,7 @@ type M3u8 struct {
 
 type Segment struct {
 	URI      string
-	Key      *Key
+	KeyIndex int
 	Title    string  // #EXTINF: duration,<title>
 	Duration float32 // #EXTINF: duration,<title>
 	Length   uint64  // #EXT-X-BYTERANGE: length[@offset]
@@ -74,7 +75,10 @@ func parse(reader io.Reader) (*M3u8, error) {
 	var (
 		i     = 0
 		count = len(lines)
-		m3u8  = &M3u8{}
+		m3u8  = &M3u8{
+			Keys: make(map[int]*Key),
+		}
+		keyIndex = 0
 
 		key     *Key
 		seg     *Segment
@@ -113,6 +117,7 @@ func parse(reader io.Reader) (*M3u8, error) {
 			if _, err := fmt.Sscanf(line, "#EXT-X-VERSION:%d", &m3u8.Version); err != nil {
 				return nil, err
 			}
+		// Parse master playlist
 		case strings.HasPrefix(line, "#EXT-X-STREAM-INF:"):
 			mp, err := parseMasterPlaylist(line)
 			if err != nil {
@@ -146,7 +151,7 @@ func parse(reader io.Reader) (*M3u8, error) {
 				return nil, err
 			}
 			seg.Duration = float32(df)
-			seg.Key = key
+			seg.KeyIndex = keyIndex
 			extInf = true
 		case strings.HasPrefix(line, "#EXT-X-BYTERANGE:"):
 			if extByte {
@@ -177,6 +182,7 @@ func parse(reader io.Reader) (*M3u8, error) {
 			}
 			seg.Length = uint64(length)
 			extByte = true
+		// Parse segments URI
 		case !strings.HasPrefix(line, "#"):
 			if extInf {
 				if seg == nil {
@@ -189,19 +195,22 @@ func parse(reader io.Reader) (*M3u8, error) {
 				seg = nil
 				continue
 			}
+		// Parse key
 		case strings.HasPrefix(line, "#EXT-X-KEY"):
 			params := parseLineParameters(line)
 			if len(params) == 0 {
 				return nil, fmt.Errorf("invalid EXT-X-KEY: %s, line: %d", line, i+1)
 			}
-			key = new(Key)
 			method := CryptMethod(params["METHOD"])
 			if method != "" && method != CryptMethodAES && method != CryptMethodNONE {
 				return nil, fmt.Errorf("invalid EXT-X-KEY method: %s, line: %d", method, i+1)
 			}
+			keyIndex++
+			key = new(Key)
 			key.Method = method
 			key.URI = params["URI"]
 			key.IV = params["IV"]
+			m3u8.Keys[keyIndex] = key
 		case line == "#EndList":
 			m3u8.EndList = true
 		default:

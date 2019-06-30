@@ -70,7 +70,8 @@ func NewTask(output string, url string) (*Downloader, error) {
 // Start runs downloader
 func (d *Downloader) Start(concurrency int) error {
 	var wg sync.WaitGroup
-	limitChan := make(chan byte, concurrency)
+	// struct{} zero size
+	limitChan := make(chan struct{}, concurrency)
 	for {
 		tsIdx, end, err := d.next()
 		if err != nil {
@@ -91,7 +92,7 @@ func (d *Downloader) Start(concurrency int) error {
 			}
 			<-limitChan
 		}(tsIdx)
-		limitChan <- 1
+		limitChan <- struct{}{}
 	}
 	wg.Wait()
 	if err := d.merge(); err != nil {
@@ -105,7 +106,7 @@ func (d *Downloader) download(segIndex int) error {
 	tsUrl := d.tsURL(segIndex)
 	b, e := tool.Get(tsUrl)
 	if e != nil {
-		return fmt.Errorf("download failed %s, %s", tsUrl, e.Error())
+		return fmt.Errorf("request %s, %s", tsUrl, e.Error())
 	}
 	//noinspection GoUnhandledErrorResult
 	defer b.Close()
@@ -113,23 +114,22 @@ func (d *Downloader) download(segIndex int) error {
 	fTemp := fPath + tsTempFileSuffix
 	f, err := os.Create(fTemp)
 	if err != nil {
-		return fmt.Errorf("create file failed: %s, %s", tsFilename, err.Error())
+		return fmt.Errorf("create file: %s, %s", tsFilename, err.Error())
 	}
 	bytes, err := ioutil.ReadAll(b)
 	if err != nil {
-		return fmt.Errorf("read bytes failed: %s, %s", tsUrl, err.Error())
+		return fmt.Errorf("read bytes: %s, %s", tsUrl, err.Error())
 	}
 	sf := d.result.M3u8.Segments[segIndex]
 	if sf == nil {
 		return fmt.Errorf("invalid segment index: %d", segIndex)
 	}
-	if sf.Key != nil {
-		key := d.result.Keys[sf.Key]
-		if key != "" {
-			bytes, err = tool.AES128Decrypt(bytes, []byte(key), []byte(sf.Key.IV))
-			if err != nil {
-				return fmt.Errorf("decryt failed: %s, %s", tsUrl, err.Error())
-			}
+	key, ok := d.result.Keys[sf.KeyIndex]
+	if ok && key != "" {
+		bytes, err = tool.AES128Decrypt(bytes, []byte(key),
+			[]byte(d.result.M3u8.Keys[sf.KeyIndex].IV))
+		if err != nil {
+			return fmt.Errorf("decryt: %s, %s", tsUrl, err.Error())
 		}
 	}
 	// https://en.wikipedia.org/wiki/MPEG_transport_stream
@@ -145,7 +145,7 @@ func (d *Downloader) download(segIndex int) error {
 	}
 	w := bufio.NewWriter(f)
 	if _, err := w.Write(bytes); err != nil {
-		return fmt.Errorf("write TS bytes failed: %s", err.Error())
+		return fmt.Errorf("write to %s: %s", fTemp, err.Error())
 	}
 	// Release file resource to rename file
 	_ = f.Close()
