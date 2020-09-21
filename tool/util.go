@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 )
@@ -21,17 +20,11 @@ func CurrentDir(joinPath ...string) (string, error) {
 }
 
 func ResolveURL(u *url.URL, p string) string {
-	if strings.HasPrefix(p, "https://") || strings.HasPrefix(p, "http://") {
-		return p
+	var Url, err = u.Parse(p)
+	if err != nil {
+		panic(err)
 	}
-	var baseURL string
-	if strings.Index(p, "/") == 0 {
-		baseURL = u.Scheme + "://" + u.Host
-	} else {
-		tU := u.String()
-		baseURL = tU[0:strings.LastIndex(tU, "/")]
-	}
-	return baseURL + path.Join("/", p)
+	return Url.String()
 }
 
 func DrawProgressBar(prefix string, proportion float32, width int, suffix ...string) {
