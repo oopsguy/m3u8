@@ -4,6 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +15,8 @@ import (
 
 	"github.com/oopsguy/m3u8/parse"
 	"github.com/oopsguy/m3u8/tool"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 const (
@@ -31,11 +36,16 @@ type Downloader struct {
 	segLen   int
 
 	result *parse.Result
+	jar    http.CookieJar
 }
 
 // NewTask returns a Task instance
-func NewTask(output string, url string) (*Downloader, error) {
-	result, err := parse.FromURL(url)
+func NewTask(output string, url string, cookie string) (*Downloader, error) {
+	jar, err := initCookieJar(url, cookie)
+	if err != nil {
+		return nil, fmt.Errorf("init cookie jar failed: %s", err.Error())
+	}
+	result, err := parse.FromURL(url, jar)
 	if err != nil {
 		return nil, err
 	}
@@ -61,6 +71,7 @@ func NewTask(output string, url string) (*Downloader, error) {
 		folder:   folder,
 		tsFolder: tsFolder,
 		result:   result,
+		jar:      jar,
 	}
 	d.segLen = len(result.M3u8.Segments)
 	d.queue = genSlice(d.segLen)
@@ -104,7 +115,7 @@ func (d *Downloader) Start(concurrency int) error {
 func (d *Downloader) download(segIndex int) error {
 	tsFilename := tsFilename(segIndex)
 	tsUrl := d.tsURL(segIndex)
-	b, e := tool.Get(tsUrl)
+	b, e := tool.Get(tsUrl, d.jar)
 	if e != nil {
 		return fmt.Errorf("request %s, %s", tsUrl, e.Error())
 	}
@@ -251,4 +262,21 @@ func genSlice(len int) []int {
 		s = append(s, i)
 	}
 	return s
+}
+
+func initCookieJar(address string, cookie string) (http.CookieJar, error) {
+	rootUrl, err := url.Parse(address)
+	if err != nil {
+		return nil, fmt.Errorf("parseurl failed: %s", err.Error())
+	}
+	rootUrl.Path = "/"
+	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	if err != nil {
+		return nil, fmt.Errorf("create cookie jar failed: %s", err.Error())
+	}
+	header := http.Header{}
+	header.Add("Cookie", cookie)
+	request := http.Request{Header: header}
+	jar.SetCookies(rootUrl, request.Cookies())
+	return jar, nil
 }

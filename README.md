@@ -9,6 +9,7 @@ You only need to specify the flags(`u`, `o`, `c`) to run, downloader will automa
 ## Features
 
 - Download and parse M3U8（VOD）
+- Pass an auth cookie to the server
 - Retry on download TS failure
 - Parse Master playlist
 - Decrypt TS
@@ -19,7 +20,7 @@ You only need to specify the flags(`u`, `o`, `c`) to run, downloader will automa
 ### source
 
 ```bash
-go run main.go -u=http://example.com/index.m3u8 -o=/data/example
+go run main.go -u=http://example.com/index.m3u8 -o=/data/example -cookie="CloudFront-Policy=...; CloudFront-Signature=...; CloudFront-Key-Pair-Id=..."
 ```
 
 ### binary:
