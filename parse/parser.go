@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"net/url"
 
 	"github.com/oopsguy/m3u8/tool"
@@ -15,13 +16,13 @@ type Result struct {
 	Keys map[int]string
 }
 
-func FromURL(link string) (*Result, error) {
+func FromURL(link string, jar http.CookieJar) (*Result, error) {
 	u, err := url.Parse(link)
 	if err != nil {
 		return nil, err
 	}
 	link = u.String()
-	body, err := tool.Get(link)
+	body, err := tool.Get(link, jar)
 	if err != nil {
 		return nil, fmt.Errorf("request m3u8 URL failed: %s", err.Error())
 	}
@@ -33,7 +34,7 @@ func FromURL(link string) (*Result, error) {
 	}
 	if len(m3u8.MasterPlaylist) != 0 {
 		sf := m3u8.MasterPlaylist[0]
-		return FromURL(tool.ResolveURL(u, sf.URI))
+		return FromURL(tool.ResolveURL(u, sf.URI), jar)
 	}
 	if len(m3u8.Segments) == 0 {
 		return nil, errors.New("can not found any TS file description")
@@ -52,7 +53,7 @@ func FromURL(link string) (*Result, error) {
 			// Request URL to extract decryption key
 			keyURL := key.URI
 			keyURL = tool.ResolveURL(u, keyURL)
-			resp, err := tool.Get(keyURL)
+			resp, err := tool.Get(keyURL, jar)
 			if err != nil {
 				return nil, fmt.Errorf("extract key failed: %s", err.Error())
 			}

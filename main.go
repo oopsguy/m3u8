@@ -10,12 +10,14 @@ import (
 
 var (
 	url      string
+	cookie   string
 	output   string
 	chanSize int
 )
 
 func init() {
 	flag.StringVar(&url, "u", "", "M3U8 URL, required")
+	flag.StringVar(&cookie, "cookie", "", "Cookie string to use")
 	flag.IntVar(&chanSize, "c", 25, "Maximum number of occurrences")
 	flag.StringVar(&output, "o", "", "Output folder, required")
 }
@@ -37,7 +39,7 @@ func main() {
 	if chanSize <= 0 {
 		panic("parameter 'c' must be greater than 0")
 	}
-	downloader, err := dl.NewTask(output, url)
+	downloader, err := dl.NewTask(output, url, cookie)
 	if err != nil {
 		panic(err)
 	}

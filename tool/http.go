@@ -7,9 +7,10 @@ import (
 	"time"
 )
 
-func Get(url string) (io.ReadCloser, error) {
+func Get(url string, jar http.CookieJar) (io.ReadCloser, error) {
 	c := http.Client{
 		Timeout: time.Duration(60) * time.Second,
+		Jar: jar,
 	}
 	resp, err := c.Get(url)
 	if err != nil {
