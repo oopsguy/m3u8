@@ -24,12 +24,16 @@ go run main.go -u=http://example.com/index.m3u8 -o=/data/example
 Linux 和 MacOS
 
 ```
+go env -w GO111MODULE="auto"
+go build .
 ./m3u8 -u=http://example.com/index.m3u8 -o=/data/example
 ```
 
 Windows PowerShell
 
 ```
+go env -w GO111MODULE="auto"
+go build .
 .\m3u8.exe -u="http://example.com/index.m3u8" -o="D:\data\example"
 ```
 
