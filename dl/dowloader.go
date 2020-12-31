@@ -42,11 +42,11 @@ func NewTask(output string, url string) (*Downloader, error) {
 	var folder string
 	// If no output folder specified, use current directory
 	if output == "" {
-		cwd, err := os.Getwd()
+		current, err := tool.CurrentDir()
 		if err != nil {
 			return nil, err
 		}
-		folder = cwd
+		folder = filepath.Join(current, output)
 	} else {
 		folder = output
 	}

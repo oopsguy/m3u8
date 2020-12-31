@@ -3,9 +3,22 @@ package tool
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 )
+
+func CurrentDir(joinPath ...string) (string, error) {
+	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		return "", err
+	}
+	p := strings.Replace(dir, "\\", "/", -1)
+	whole := filepath.Join(joinPath...)
+	whole = filepath.Join(p, whole)
+	return whole, nil
+}
 
 func ResolveURL(u *url.URL, p string) string {
 	if strings.HasPrefix(p, "https://") || strings.HasPrefix(p, "http://") {
