@@ -31,9 +31,6 @@ func main() {
 	if url == "" {
 		panicParameter("u")
 	}
-	if output == "" {
-		panicParameter("o")
-	}
 	if chanSize <= 0 {
 		panic("parameter 'c' must be greater than 0")
 	}
