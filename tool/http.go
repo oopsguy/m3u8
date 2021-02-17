@@ -4,11 +4,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"crypto/tls"
 	"time"
 )
 
 func Get(url string) (io.ReadCloser, error) {
 	c := http.Client{
+                Transport: &http.Transport{
+                       TLSClientConfig: &tls.Config{
+                               InsecureSkipVerify: true,
+                       },
+                },
 		Timeout: time.Duration(60) * time.Second,
 	}
 	resp, err := c.Get(url)
