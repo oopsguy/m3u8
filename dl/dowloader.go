@@ -23,18 +23,19 @@ const (
 )
 
 type Downloader struct {
-	lock     sync.Mutex
-	queue    []int
-	folder   string
-	tsFolder string
-	finish   int32
-	segLen   int
+	lock        sync.Mutex
+	queue       []int
+	folder      string
+	outFileName string
+	tsFolder    string
+	finish      int32
+	segLen      int
 
 	result *parse.Result
 }
 
 // NewTask returns a Task instance
-func NewTask(output string, url string) (*Downloader, error) {
+func NewTask(output, fileName string, url string) (*Downloader, error) {
 	result, err := parse.FromURL(url)
 	if err != nil {
 		return nil, err
@@ -58,9 +59,10 @@ func NewTask(output string, url string) (*Downloader, error) {
 		return nil, fmt.Errorf("create ts folder '[%s]' failed: %s", tsFolder, err.Error())
 	}
 	d := &Downloader{
-		folder:   folder,
-		tsFolder: tsFolder,
-		result:   result,
+		folder:      folder,
+		tsFolder:    tsFolder,
+		result:      result,
+		outFileName: fileName,
 	}
 	d.segLen = len(result.M3u8.Segments)
 	d.queue = genSlice(d.segLen)
@@ -202,7 +204,7 @@ func (d *Downloader) merge() error {
 	}
 
 	// Create a TS file for merging, all segment files will be written to this file.
-	mFilePath := filepath.Join(d.folder, mergeTSFilename)
+	mFilePath := filepath.Join(d.folder, d.outFileName+".ts")
 	mFile, err := os.Create(mFilePath)
 	if err != nil {
 		return fmt.Errorf("create main TS file failed：%s", err.Error())
