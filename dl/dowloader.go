@@ -10,8 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/oopsguy/m3u8/parse"
-	"github.com/oopsguy/m3u8/tool"
+	"github.com/kolychen/m3u8/parse"
+	"github.com/kolychen/m3u8/tool"
 )
 
 const (
@@ -36,7 +36,7 @@ type Downloader struct {
 
 // NewTask returns a Task instance
 func NewTask(output, fileName string, url string) (*Downloader, error) {
-	result, err := parse.FromURL(url)
+	result, err := parse.FromURL(url, true)
 	if err != nil {
 		return nil, err
 	}
