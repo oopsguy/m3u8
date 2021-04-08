@@ -54,6 +54,9 @@ type MasterPlaylist struct {
 	Resolution string
 	Codecs     string
 	ProgramID  uint32
+	Duration   float64
+	Width      int
+	Height     int
 }
 
 // #EXT-X-KEY:METHOD=AES-128,URI="key.key"
@@ -237,6 +240,9 @@ func parseMasterPlaylist(line string) (*MasterPlaylist, error) {
 			mp.BandWidth = uint32(v)
 		case k == "RESOLUTION":
 			mp.Resolution = v
+			xPos := strings.Index(v, "x")
+			mp.Width, _ = strconv.Atoi(v[:xPos])
+			mp.Height, _ = strconv.Atoi(v[xPos+1:])
 		case k == "PROGRAM-ID":
 			v, err := strconv.ParseUint(v, 10, 32)
 			if err != nil {
@@ -245,6 +251,12 @@ func parseMasterPlaylist(line string) (*MasterPlaylist, error) {
 			mp.ProgramID = uint32(v)
 		case k == "CODECS":
 			mp.Codecs = v
+		case k == "TAP-DURATION":
+			v, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				return nil, err
+			}
+			mp.Duration = v
 		}
 	}
 	return mp, nil
