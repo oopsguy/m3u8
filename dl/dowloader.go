@@ -54,9 +54,9 @@ func NewTask(output, fileName string, url string) (*Downloader, error) {
 	if err := os.MkdirAll(folder, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("create storage folder failed: %s", err.Error())
 	}
-	tsFolder := filepath.Join(folder, tsFolderName)
-	if err := os.MkdirAll(tsFolder, os.ModePerm); err != nil {
-		return nil, fmt.Errorf("create ts folder '[%s]' failed: %s", tsFolder, err.Error())
+	tsFolder, err := ioutil.TempDir(folder, fileName) //解决并发下载的情况下，临时目录冲突的问题
+	if err != nil {
+		return nil, fmt.Errorf("create ts folder '[%s]' failed: %s", fileName, err.Error())
 	}
 	d := &Downloader{
 		folder:      folder,
@@ -189,8 +189,8 @@ func (d *Downloader) back(segIndex int) error {
 	return nil
 }
 
+// In fact, the number of downloaded segments should be equal to number of m3u8 segments
 func (d *Downloader) merge() error {
-	// In fact, the number of downloaded segments should be equal to number of m3u8 segments
 	missingCount := 0
 	for idx := 0; idx < d.segLen; idx++ {
 		tsFilename := tsFilename(idx)
