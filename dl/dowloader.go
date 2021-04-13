@@ -10,8 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/oopsguy/m3u8/parse"
-	"github.com/oopsguy/m3u8/tool"
+	"github.com/kolychen/m3u8/parse"
+	"github.com/kolychen/m3u8/tool"
 )
 
 const (
@@ -23,19 +23,20 @@ const (
 )
 
 type Downloader struct {
-	lock     sync.Mutex
-	queue    []int
-	folder   string
-	tsFolder string
-	finish   int32
-	segLen   int
+	lock        sync.Mutex
+	queue       []int
+	folder      string
+	outFileName string
+	tsFolder    string
+	finish      int32
+	segLen      int
 
 	result *parse.Result
 }
 
 // NewTask returns a Task instance
-func NewTask(output string, url string) (*Downloader, error) {
-	result, err := parse.FromURL(url)
+func NewTask(output, fileName string, url string) (*Downloader, error) {
+	result, err := parse.FromURL(url, true)
 	if err != nil {
 		return nil, err
 	}
@@ -53,14 +54,15 @@ func NewTask(output string, url string) (*Downloader, error) {
 	if err := os.MkdirAll(folder, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("create storage folder failed: %s", err.Error())
 	}
-	tsFolder := filepath.Join(folder, tsFolderName)
-	if err := os.MkdirAll(tsFolder, os.ModePerm); err != nil {
-		return nil, fmt.Errorf("create ts folder '[%s]' failed: %s", tsFolder, err.Error())
+	tsFolder, err := ioutil.TempDir(folder, fileName) //解决并发下载的情况下，临时目录冲突的问题
+	if err != nil {
+		return nil, fmt.Errorf("create ts folder '[%s]' failed: %s", fileName, err.Error())
 	}
 	d := &Downloader{
-		folder:   folder,
-		tsFolder: tsFolder,
-		result:   result,
+		folder:      folder,
+		tsFolder:    tsFolder,
+		result:      result,
+		outFileName: fileName,
 	}
 	d.segLen = len(result.M3u8.Segments)
 	d.queue = genSlice(d.segLen)
@@ -187,8 +189,8 @@ func (d *Downloader) back(segIndex int) error {
 	return nil
 }
 
+// In fact, the number of downloaded segments should be equal to number of m3u8 segments
 func (d *Downloader) merge() error {
-	// In fact, the number of downloaded segments should be equal to number of m3u8 segments
 	missingCount := 0
 	for idx := 0; idx < d.segLen; idx++ {
 		tsFilename := tsFilename(idx)
@@ -202,7 +204,7 @@ func (d *Downloader) merge() error {
 	}
 
 	// Create a TS file for merging, all segment files will be written to this file.
-	mFilePath := filepath.Join(d.folder, mergeTSFilename)
+	mFilePath := filepath.Join(d.folder, d.outFileName+".ts")
 	mFile, err := os.Create(mFilePath)
 	if err != nil {
 		return fmt.Errorf("create main TS file failed：%s", err.Error())

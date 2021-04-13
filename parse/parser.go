@@ -15,7 +15,7 @@ type Result struct {
 	Keys map[int]string
 }
 
-func FromURL(link string) (*Result, error) {
+func FromURL(link string, isGetSubPlayerlist bool) (*Result, error) {
 	u, err := url.Parse(link)
 	if err != nil {
 		return nil, err
@@ -31,11 +31,11 @@ func FromURL(link string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(m3u8.MasterPlaylist) != 0 {
+	if len(m3u8.MasterPlaylist) != 0 && isGetSubPlayerlist {
 		sf := m3u8.MasterPlaylist[0]
-		return FromURL(tool.ResolveURL(u, sf.URI))
+		return FromURL(tool.ResolveURL(u, sf.URI), isGetSubPlayerlist)
 	}
-	if len(m3u8.Segments) == 0 {
+	if len(m3u8.Segments) == 0 && isGetSubPlayerlist {
 		return nil, errors.New("can not found any TS file description")
 	}
 	result := &Result{
