@@ -29,9 +29,11 @@ func main() {
 		}
 	}()
 	if url == "" {
+		flag.Usage()
 		panicParameter("u")
 	}
 	if output == "" {
+		flag.Usage()
 		panicParameter("o")
 	}
 	if chanSize <= 0 {
