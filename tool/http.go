@@ -4,13 +4,21 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"time"
 )
 
-func Get(url string) (io.ReadCloser, error) {
-	c := http.Client{
+var c http.Client
+
+func init() {
+	jar, _ := cookiejar.New(nil)
+	c = http.Client{
 		Timeout: time.Duration(60) * time.Second,
+		Jar:     jar,
 	}
+}
+
+func Get(url string) (io.ReadCloser, error) {
 	resp, err := c.Get(url)
 	if err != nil {
 		return nil, err
