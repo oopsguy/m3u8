@@ -16,8 +16,6 @@ import (
 
 const (
 	tsExt            = ".ts"
-	tsFolderName     = "ts"
-	mergeTSFilename  = "main.ts"
 	tsTempFileSuffix = "_tmp"
 	progressWidth    = 40
 )
@@ -29,12 +27,13 @@ type Downloader struct {
 	tsFolder string
 	finish   int32
 	segLen   int
+	filename string
 
 	result *parse.Result
 }
 
 // NewTask returns a Task instance
-func NewTask(output string, url string) (*Downloader, error) {
+func NewTask(output, url, filename string) (*Downloader, error) {
 	result, err := parse.FromURL(url)
 	if err != nil {
 		return nil, err
@@ -50,17 +49,18 @@ func NewTask(output string, url string) (*Downloader, error) {
 	} else {
 		folder = output
 	}
-	if err := os.MkdirAll(folder, os.ModePerm); err != nil {
+	if err := os.MkdirAll(folder, 0755); err != nil {
 		return nil, fmt.Errorf("create storage folder failed: %s", err.Error())
 	}
-	tsFolder := filepath.Join(folder, tsFolderName)
-	if err := os.MkdirAll(tsFolder, os.ModePerm); err != nil {
+	tsFolder := filepath.Join(folder, filename)
+	if err := os.MkdirAll(tsFolder, 0755); err != nil {
 		return nil, fmt.Errorf("create ts folder '[%s]' failed: %s", tsFolder, err.Error())
 	}
 	d := &Downloader{
 		folder:   folder,
 		tsFolder: tsFolder,
 		result:   result,
+		filename: filename,
 	}
 	d.segLen = len(result.M3u8.Segments)
 	d.queue = genSlice(d.segLen)
@@ -202,7 +202,7 @@ func (d *Downloader) merge() error {
 	}
 
 	// Create a TS file for merging, all segment files will be written to this file.
-	mFilePath := filepath.Join(d.folder, mergeTSFilename)
+	mFilePath := filepath.Join(d.folder, d.filename+".mp4")
 	mFile, err := os.Create(mFilePath)
 	if err != nil {
 		return fmt.Errorf("create main TS file failed：%s", err.Error())
