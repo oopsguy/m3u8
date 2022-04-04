@@ -28,12 +28,12 @@ type Downloader struct {
 	finish   int32
 	segLen   int
 	filename string
-
+	folderName string
 	result *parse.Result
 }
 
 // NewTask returns a Task instance
-func NewTask(output, url, filename string) (*Downloader, error) {
+func NewTask(output, url, filename , folderName string) (*Downloader, error) {
 	result, err := parse.FromURL(url)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func NewTask(output, url, filename string) (*Downloader, error) {
 	if err := os.MkdirAll(folder, 0755); err != nil {
 		return nil, fmt.Errorf("create storage folder failed: %s", err.Error())
 	}
-	tsFolder := filepath.Join(folder, filename)
+	tsFolder := filepath.Join(folder, folderName)
 	if err := os.MkdirAll(tsFolder, 0755); err != nil {
 		return nil, fmt.Errorf("create ts folder '[%s]' failed: %s", tsFolder, err.Error())
 	}
@@ -202,7 +202,7 @@ func (d *Downloader) merge() error {
 	}
 
 	// Create a TS file for merging, all segment files will be written to this file.
-	mFilePath := filepath.Join(d.folder, d.filename+".mp4")
+	mFilePath := filepath.Join(d.folder, d.filename)
 	mFile, err := os.Create(mFilePath)
 	if err != nil {
 		return fmt.Errorf("create main TS file failed：%s", err.Error())
