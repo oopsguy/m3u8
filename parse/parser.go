@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"sort"
 
 	"github.com/ravivarshney001/m3u8/tool"
 )
@@ -32,6 +33,7 @@ func FromURL(link string) (*Result, error) {
 		return nil, err
 	}
 	if len(m3u8.MasterPlaylist) != 0 {
+		sort.Slice(m3u8.MasterPlaylist, func(i, j int) bool { return m3u8.MasterPlaylist[i].BandWidth > m3u8.MasterPlaylist[j].BandWidth })
 		sf := m3u8.MasterPlaylist[0]
 		return FromURL(tool.ResolveURL(u, sf.URI))
 	}

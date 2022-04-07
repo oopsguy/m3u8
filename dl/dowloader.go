@@ -18,6 +18,7 @@ const (
 	tsExt            = ".ts"
 	tsTempFileSuffix = "_tmp"
 	progressWidth    = 40
+	tsFolderName     = "ts"
 )
 
 type Downloader struct {
@@ -28,12 +29,11 @@ type Downloader struct {
 	finish   int32
 	segLen   int
 	filename string
-	folderName string
-	result *parse.Result
+	result   *parse.Result
 }
 
 // NewTask returns a Task instance
-func NewTask(output, url, filename , folderName string) (*Downloader, error) {
+func NewTask(output, url, filename string) (*Downloader, error) {
 	result, err := parse.FromURL(url)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func NewTask(output, url, filename , folderName string) (*Downloader, error) {
 	if err := os.MkdirAll(folder, 0755); err != nil {
 		return nil, fmt.Errorf("create storage folder failed: %s", err.Error())
 	}
-	tsFolder := filepath.Join(folder, folderName)
+	tsFolder := filepath.Join(folder, tsFolderName)
 	if err := os.MkdirAll(tsFolder, 0755); err != nil {
 		return nil, fmt.Errorf("create ts folder '[%s]' failed: %s", tsFolder, err.Error())
 	}
