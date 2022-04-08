@@ -17,7 +17,7 @@ func DownloadMP4(url, output, fileName string) error {
 	}
 	downloader, err := dl.NewTask(output, url, fileName)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if err := downloader.Start(chanSize); err != nil {
 		return err
