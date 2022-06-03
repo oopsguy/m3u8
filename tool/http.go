@@ -1,17 +1,18 @@
 package tool
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 )
 
 func Get(url string) (io.ReadCloser, error) {
-	c := http.Client{
-		Timeout: time.Duration(60) * time.Second,
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
-	resp, err := c.Get(url)
+	client := &http.Client{Transport: tr}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}
