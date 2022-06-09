@@ -89,6 +89,7 @@ func (d *Downloader) Start(concurrency int) error {
 				// Back into the queue, retry request
 				fmt.Printf("[failed] %s\n", err.Error())
 				// Mark this file as processed, even if its failed downloading
+				// The downloader will return with error only if all resolutions fail.
 				atomic.AddInt32(&d.finish, 1)
 				//if err := d.back(idx); err != nil {
 				//	fmt.Printf(err.Error())
@@ -120,9 +121,10 @@ func (d *Downloader) download(segIndex int) error {
 			break
 		}
 		quality := d.result.M3u8.AllPlaylists[qualityIdx].Bandwidth
-		fmt.Printf("ts file with bandwidth %d not found for index: %d, error: %s\n", quality, segIndex, e.Error())
+		fmt.Printf("ts file with bandwidth %d not found for segment index: %d, error: %s\n", quality, segIndex, e.Error())
 	}
 	if !found {
+		_ = b.Close()
 		return errors.Wrap(e, "no resolutions ts files found")
 	}
 

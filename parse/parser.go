@@ -24,6 +24,7 @@ func FromURL(link string) (*Result, error) {
 	link = u.String()
 	body, err := tool.Get(link)
 	if err != nil {
+		_ = body.Close()
 		return nil, fmt.Errorf("request m3u8 URL failed: %s", err.Error())
 	}
 	//noinspection GoUnhandledErrorResult
@@ -69,6 +70,7 @@ func FromURL(link string) (*Result, error) {
 			keyURL = tool.ResolveURL(u, keyURL)
 			resp, err := tool.Get(keyURL)
 			if err != nil {
+				_ = resp.Close()
 				return nil, fmt.Errorf("extract key failed: %s", err.Error())
 			}
 			keyByte, err := ioutil.ReadAll(resp)
