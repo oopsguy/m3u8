@@ -121,9 +121,10 @@ func (d *Downloader) download(segIndex int) error {
 			break
 		}
 		quality := d.result.M3u8.AllPlaylists[qualityIdx].Bandwidth
-		fmt.Printf("ts file with bandwidth %d not found for index: %d, error: %s\n", quality, segIndex, e.Error())
+		fmt.Printf("ts file with bandwidth %d not found for segment index: %d, error: %s\n", quality, segIndex, e.Error())
 	}
 	if !found {
+		_ = b.Close()
 		return errors.Wrap(e, "no resolutions ts files found")
 	}
 
