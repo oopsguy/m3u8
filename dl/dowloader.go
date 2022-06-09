@@ -3,6 +3,8 @@ package dl
 import (
 	"bufio"
 	"fmt"
+	"github.com/pkg/errors"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -62,7 +64,7 @@ func NewTask(output, url, filename string) (*Downloader, error) {
 		result:   result,
 		filename: filename,
 	}
-	d.segLen = len(result.M3u8.Segments)
+	d.segLen = len(result.M3u8.AllPlaylists[0].Segments)
 	d.queue = genSlice(d.segLen)
 	return d, nil
 }
@@ -86,9 +88,11 @@ func (d *Downloader) Start(concurrency int) error {
 			if err := d.download(idx); err != nil {
 				// Back into the queue, retry request
 				fmt.Printf("[failed] %s\n", err.Error())
-				if err := d.back(idx); err != nil {
-					fmt.Printf(err.Error())
-				}
+				// Mark this file as processed, even if its failed downloading
+				atomic.AddInt32(&d.finish, 1)
+				//if err := d.back(idx); err != nil {
+				//	fmt.Printf(err.Error())
+				//}
 			}
 			<-limitChan
 		}(tsIdx)
@@ -102,12 +106,26 @@ func (d *Downloader) Start(concurrency int) error {
 }
 
 func (d *Downloader) download(segIndex int) error {
+	var b io.ReadCloser
+	var e error
+	var found = false
+	var tsUrl string
+
 	tsFilename := tsFilename(segIndex)
-	tsUrl := d.tsURL(segIndex)
-	b, e := tool.Get(tsUrl)
-	if e != nil {
-		return fmt.Errorf("request %s, %s", tsUrl, e.Error())
+	for qualityIdx, _ := range d.result.M3u8.AllPlaylists {
+		tsUrl = d.tsURL(segIndex, qualityIdx)
+		b, e = tool.Get(tsUrl)
+		if e == nil {
+			found = true
+			break
+		}
+		quality := d.result.M3u8.AllPlaylists[qualityIdx].Bandwidth
+		fmt.Printf("ts file with bandwidth %d not found for index: %d, error: %s\n", quality, segIndex, e.Error())
 	}
+	if !found {
+		return errors.Wrap(e, "no resolutions ts files found")
+	}
+
 	//noinspection GoUnhandledErrorResult
 	defer b.Close()
 	fPath := filepath.Join(d.tsFolder, tsFilename)
@@ -120,7 +138,7 @@ func (d *Downloader) download(segIndex int) error {
 	if err != nil {
 		return fmt.Errorf("read bytes: %s, %s", tsUrl, err.Error())
 	}
-	sf := d.result.M3u8.Segments[segIndex]
+	sf := d.result.M3u8.AllPlaylists[0].Segments[segIndex]
 	if sf == nil {
 		return fmt.Errorf("invalid segment index: %d", segIndex)
 	}
@@ -236,9 +254,9 @@ func (d *Downloader) merge() error {
 	return nil
 }
 
-func (d *Downloader) tsURL(segIndex int) string {
-	seg := d.result.M3u8.Segments[segIndex]
-	return tool.ResolveURL(d.result.URL, seg.URI)
+func (d *Downloader) tsURL(segIndex int, qualityInx int) string {
+	seg := d.result.M3u8.AllPlaylists[qualityInx].Segments[segIndex]
+	return tool.ResolveURL(d.result.M3u8.AllPlaylists[qualityInx].BaseUrl, seg.URI)
 }
 
 func tsFilename(ts int) string {

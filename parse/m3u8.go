@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -28,10 +29,13 @@ const (
 var linePattern = regexp.MustCompile(`([a-zA-Z-]+)=("[^"]+"|[^",]+)`)
 
 type M3u8 struct {
+	Bandwidth      uint32
+	BaseUrl        *url.URL
 	Version        int8   // EXT-X-VERSION:version
 	MediaSequence  uint64 // Default 0, #EXT-X-MEDIA-SEQUENCE:sequence
 	Segments       []*Segment
 	MasterPlaylist []*MasterPlaylist
+	AllPlaylists   []*M3u8
 	Keys           map[int]*Key
 	EndList        bool         // #EXT-X-ENDLIST
 	PlaylistType   PlaylistType // VOD or EVENT
@@ -76,7 +80,8 @@ func parse(reader io.Reader) (*M3u8, error) {
 		i     = 0
 		count = len(lines)
 		m3u8  = &M3u8{
-			Keys: make(map[int]*Key),
+			Keys:         make(map[int]*Key),
+			AllPlaylists: make([]*M3u8, 0),
 		}
 		keyIndex = 0
 
