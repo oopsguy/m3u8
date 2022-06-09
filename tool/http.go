@@ -16,6 +16,7 @@ func Get(url string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("http error: status code %d", resp.StatusCode)
 	}

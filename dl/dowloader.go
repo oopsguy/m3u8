@@ -89,6 +89,7 @@ func (d *Downloader) Start(concurrency int) error {
 				// Back into the queue, retry request
 				fmt.Printf("[failed] %s\n", err.Error())
 				// Mark this file as processed, even if its failed downloading
+				// The downloader will return with error only if all resolutions fail.
 				atomic.AddInt32(&d.finish, 1)
 				//if err := d.back(idx); err != nil {
 				//	fmt.Printf(err.Error())
