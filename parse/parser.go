@@ -1,8 +1,8 @@
 package parse
 
 import (
-	"errors"
 	"fmt"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/url"
 	"sort"
@@ -34,10 +34,23 @@ func FromURL(link string) (*Result, error) {
 	}
 	if len(m3u8.MasterPlaylist) != 0 {
 		sort.Slice(m3u8.MasterPlaylist, func(i, j int) bool { return m3u8.MasterPlaylist[i].BandWidth > m3u8.MasterPlaylist[j].BandWidth })
-		sf := m3u8.MasterPlaylist[0]
-		return FromURL(tool.ResolveURL(u, sf.URI))
-	}
-	if len(m3u8.Segments) == 0 {
+		// Read all M3U8 segments and store in m3u8.AllPlaylists
+		for _, pl := range m3u8.MasterPlaylist {
+			result, err := FromURL(tool.ResolveURL(u, pl.URI))
+			if err != nil {
+				return nil, errors.Wrap(err, "error while reading master playlist URI:")
+			}
+			result.M3u8.Bandwidth = pl.BandWidth
+			result.M3u8.BaseUrl = result.URL
+			m3u8.AllPlaylists = append(m3u8.AllPlaylists, result.M3u8)
+		}
+
+		if len(m3u8.AllPlaylists) == 0 {
+			// No playlists
+			return nil, errors.New("no resolution playlists found in this m3u8!")
+		}
+
+	} else if len(m3u8.Segments) == 0 {
 		return nil, errors.New("can not found any TS file description")
 	}
 	result := &Result{
