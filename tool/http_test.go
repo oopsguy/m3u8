@@ -8,6 +8,9 @@ import (
 func TestGet(t *testing.T) {
 	body, err := Get("https://raw.githubusercontent.com/oopsguy/m3u8/master/README.md")
 	if err != nil {
+		if body != nil {
+			_ = body.Close()
+		}
 		t.Error(err)
 	}
 	defer body.Close()
